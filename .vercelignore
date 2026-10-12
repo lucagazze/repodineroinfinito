@@ -1,0 +1,8 @@
+.env*
+!.env.local.example
+*.key
+node_modules
+.next
+.next-*
+supabase/_*
+*.log

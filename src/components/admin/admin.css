@@ -1,0 +1,442 @@
+/*
+ * Estilos del panel (tarjetas blancas de 16 px,
+ * botones casi negros, etiquetas mayúsculas chicas, modo oscuro por clase).
+ * Se importa solo desde /admin y /entrar. Las clases .ad-* son las del kit
+ * (ui.tsx) y las de las páginas viejas: así todo cambia de piel junto.
+ */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  .ad-root {
+    --bg: #f5f5f7; --panel: #ffffff; --ink: #18181b; --ink2: #3f3f46; --muted: #71717a; --faint: #a1a1aa;
+    --line: rgba(0, 0, 0, .07); --line2: #f4f4f5; --fill: #f4f4f5; --fill2: #e4e4e7;
+    --brand: #7c3aed; --brand-soft: rgba(139, 92, 246, .10); --brand-line: rgba(139, 92, 246, .25);
+    --primary: #18181b; --on-primary: #ffffff;
+    --ok: #059669; --ok-soft: rgba(16, 185, 129, .10); --ok-line: rgba(16, 185, 129, .25);
+    --warn: #d97706; --warn-soft: rgba(245, 158, 11, .10); --warn-line: rgba(245, 158, 11, .30);
+    --bad: #dc2626; --bad-soft: rgba(239, 68, 68, .08); --bad-line: rgba(239, 68, 68, .25);
+    --chart: #8b5cf6;
+    @apply min-h-screen bg-[#f5f5f7] font-sans text-zinc-900 antialiased;
+    font-size: 13px;
+    line-height: 1.45;
+    color-scheme: light;
+  }
+  .ad-root.dark {
+    --bg: #0a0a0a; --panel: #18181b; --ink: #fafafa; --ink2: #d4d4d8; --muted: #a1a1aa; --faint: #71717a;
+    --line: rgba(255, 255, 255, .07); --line2: rgba(255, 255, 255, .05); --fill: #27272a; --fill2: #3f3f46;
+    --brand: #a78bfa; --brand-soft: rgba(139, 92, 246, .16); --brand-line: rgba(139, 92, 246, .35);
+    --primary: #ffffff; --on-primary: #09090b;
+    --ok: #34d399; --warn: #fbbf24; --bad: #f87171;
+    --chart: #a78bfa;
+    @apply bg-[#0a0a0a] text-zinc-100;
+    color-scheme: dark;
+  }
+  html:has(.ad-root.dark) { background: #0a0a0a; }
+  html:has(.ad-root:not(.dark)) { background: #f5f5f7; }
+  /* El reset de Tailwind pone los svg en bloque: rompe los íconos dentro de un texto. */
+  .ad-root svg { display: inline-block; }
+  .ad-root code, .ad-root pre, .ad-root kbd { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+  .ad-root ::-webkit-scrollbar { width: 6px; height: 6px; }
+  .ad-root ::-webkit-scrollbar-track { background: transparent; }
+  .ad-root ::-webkit-scrollbar-thumb { background: #d4d4d8; border-radius: 999px; }
+  .ad-root.dark ::-webkit-scrollbar-thumb { background: #3f3f46; }
+  .ad-root input:-webkit-autofill { -webkit-box-shadow: 0 0 0 1000px #fff inset !important; -webkit-text-fill-color: #18181b !important; }
+  .ad-root.dark input:-webkit-autofill { -webkit-box-shadow: 0 0 0 1000px #27272a inset !important; -webkit-text-fill-color: #fff !important; }
+  .ad-root button:not(:disabled) { transition: transform .12s cubic-bezier(.4, 0, .2, 1), opacity .12s ease, background-color .15s, border-color .15s, color .15s; }
+  .ad-root button:not(:disabled):active { transform: scale(.97); }
+}
+
+@layer components {
+  /* ---------- tipografía y bloques ---------- */
+  .card { @apply rounded-2xl border border-black/[0.06] bg-white shadow-[0_4px_20px_rgba(0,0,0,0.03)] dark:border-white/[0.06] dark:bg-zinc-900 dark:shadow-none; }
+  .page-header { @apply mb-6 flex flex-col justify-between gap-4 md:flex-row md:items-center; }
+  .page-title { @apply flex items-center gap-2.5 text-[22px] font-bold leading-tight tracking-tight text-zinc-900 sm:text-[26px] dark:text-white; }
+  .page-subtitle { @apply mt-1 text-[12.5px] font-medium leading-relaxed text-zinc-500 dark:text-zinc-400; }
+  .label-xs { @apply text-[12px] font-medium text-zinc-500 dark:text-zinc-400; }
+  .apple-input { @apply h-10 w-full rounded-xl border border-zinc-200 bg-zinc-50/50 px-3.5 text-[13px] font-medium text-zinc-900 outline-none transition-all duration-200 placeholder:text-zinc-400/80 focus:border-zinc-400 focus:bg-white focus:ring-4 focus:ring-zinc-900/5 dark:border-zinc-800 dark:bg-zinc-900/50 dark:text-zinc-100 dark:focus:border-zinc-600 dark:focus:bg-zinc-900 dark:focus:ring-white/5; }
+  .shimmer-bg {
+    background: linear-gradient(90deg, rgba(229, 229, 234, .6) 25%, rgba(242, 242, 247, .9) 50%, rgba(229, 229, 234, .6) 75%);
+    background-size: 200% 100%; animation: apple-shimmer 1.6s ease-in-out infinite;
+  }
+  .dark .shimmer-bg { background: linear-gradient(90deg, rgba(39, 39, 42, .6) 25%, rgba(52, 52, 56, .9) 50%, rgba(39, 39, 42, .6) 75%); background-size: 200% 100%; }
+  .live-dot { animation: livePulse 2s ease-in-out infinite; }
+
+  /* ---------- armazón ---------- */
+  .ad { @apply flex min-h-screen; }
+  .ad-body { @apply flex min-w-0 flex-1 flex-col; }
+  .ad-main { @apply w-full min-w-0 max-w-[1320px] px-4 pb-28 pt-5 sm:px-6 lg:px-8 lg:pt-8; }
+
+  /* ---------- encabezado de página ---------- */
+  .ad-head { @apply mb-6 flex flex-col justify-between gap-4 md:flex-row md:items-end; }
+  .ad-head h1 { @apply text-[22px] font-bold leading-tight tracking-tight text-zinc-900 sm:text-[26px] dark:text-white; }
+  .ad-head p { @apply mt-1 text-[12.5px] font-medium leading-relaxed text-zinc-500 dark:text-zinc-400; }
+  .ad-head-ic { @apply flex h-10 w-10 shrink-0 items-center justify-center rounded-xl; }
+  .ad-crumb { @apply mb-1.5 text-[12px] font-medium text-zinc-500 dark:text-zinc-400; }
+  .ad-crumb a:hover { @apply text-zinc-700 dark:text-zinc-200; }
+  .ad-actions { @apply flex flex-wrap items-center gap-2; }
+  /* El filtro de fechas: debajo del título, pegado arriba al bajar (debajo de la barra del celular). */
+  .ad-rangebar { @apply sticky top-14 z-40 -mx-4 -mt-2 mb-5 flex items-center gap-3 border-b border-transparent px-4 py-2 transition-[background-color,border-color,box-shadow] duration-200 sm:-mx-6 sm:px-6 lg:top-12 lg:-mx-8 lg:px-8; }
+  .ad-rangebar[data-stuck] { @apply border-zinc-200/80 bg-[#f5f5f7]/85 shadow-[0_10px_24px_-18px_rgba(0,0,0,0.35)] backdrop-blur-xl dark:border-white/[0.06] dark:bg-[#0a0a0a]/85; }
+
+  /* ---------- tarjetas ---------- */
+  .ad-card { @apply min-w-0 rounded-2xl border border-black/[0.06] bg-white shadow-[0_4px_20px_rgba(0,0,0,0.03)] dark:border-white/[0.06] dark:bg-zinc-900 dark:shadow-none; }
+  .ad-card-h { @apply flex items-start justify-between gap-3 px-5 pb-3 pt-5 sm:px-6; }
+  .ad-card-h h3 { @apply flex flex-wrap items-center gap-2 text-[14.5px] font-semibold tracking-tight text-zinc-900 dark:text-white; }
+  .ad-card-h p { @apply mt-1 text-[12.5px] leading-relaxed text-zinc-500 dark:text-zinc-400; }
+  .ad-card-b { @apply px-5 pb-5 sm:px-6 sm:pb-6; }
+  .ad-card > .ad-card-b:first-child { @apply pt-5 sm:pt-6; }
+  .ad-card.tone-brand { @apply border-violet-500/25 bg-violet-50/60 shadow-none dark:bg-violet-500/10; }
+  .ad-card.tone-warn { @apply border-amber-500/25 bg-amber-50/70 shadow-none dark:bg-amber-500/10; }
+  .ad-card.tone-bad { @apply border-red-500/20 bg-red-50/60 shadow-none dark:bg-red-500/[0.07]; }
+
+  .ad-grid { @apply grid gap-4; }
+  .ad-grid > *, .ad-row > * { @apply min-w-0; }
+  .g-kpi { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+  .g-2 { grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); }
+  .g-3 { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+  .g-21 { grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr); }
+  .g-11 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .mt { @apply mt-4; }
+  .mt2 { @apply mt-6; }
+  .ad-sec { @apply mb-3 mt-7 flex items-center justify-between gap-3; }
+  .ad-sec h2 { @apply flex items-center gap-1.5 text-[13px] font-semibold text-zinc-500 dark:text-zinc-400; }
+  /* Encabezado de una sección de la página (p. ej. «Resultados · Últimos 7 días»). */
+  .ad-sec2 { @apply mb-4 mt-10; }
+  .ad-sec2 h2 { @apply text-[18px] font-semibold tracking-tight text-zinc-900 dark:text-white; }
+  .ad-sec2 p { @apply mt-1 text-[13px] text-zinc-500 dark:text-zinc-400; }
+  .ad-muted { @apply text-zinc-500 dark:text-zinc-400; }
+  .ad-faint { @apply text-zinc-400 dark:text-zinc-500; }
+  .ad-small { @apply text-[11.5px]; }
+  .ad-note { @apply m-0 text-[12.5px] leading-relaxed text-zinc-500 dark:text-zinc-400; }
+  .ad-note + .ad-note { @apply mt-2; }
+  .ad-note b, .ad-note strong { @apply font-bold text-zinc-700 dark:text-zinc-200; }
+  .ad-link-a { @apply whitespace-nowrap font-bold text-violet-600 hover:underline dark:text-violet-400; }
+  .ad-root code { @apply break-all rounded-md border border-zinc-200 bg-zinc-50 px-1.5 py-px text-[11.5px] text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200; }
+
+  /* ---------- números ---------- */
+  .ad-kpi { @apply px-5 py-4; }
+  .ad-kpi span { @apply flex items-center gap-1.5 text-[12.5px] font-medium text-zinc-500 dark:text-zinc-400; }
+  .ad-kpi strong { @apply mt-2 block text-[22px] font-semibold leading-none tracking-tight text-zinc-900 dark:text-white; font-variant-numeric: tabular-nums; }
+  .ad-kpi small { @apply mt-2 block text-[12px] text-zinc-500 dark:text-zinc-400; }
+  .ad-kpi .ad-kpi-src { @apply mt-1.5 block text-[11px] not-italic text-zinc-400 dark:text-zinc-500; }
+  .ad-stat { @apply min-w-0; }
+  .ad-stat > span { @apply flex items-center gap-1.5 text-[12.5px] font-medium text-zinc-500 dark:text-zinc-400; }
+  .ad-stat > strong { @apply mt-2 block break-words text-[20px] font-bold leading-none tracking-tight text-zinc-900 dark:text-white; font-variant-numeric: tabular-nums; }
+  .ad-stat > small { @apply mt-2 block text-[12px] text-zinc-500 dark:text-zinc-400; }
+  .ad-stat.md > strong { @apply text-[24px]; }
+  .ad-stat.lg > strong { @apply mt-3 text-[38px] sm:text-[46px]; letter-spacing: -.035em; }
+  .ad-delta { @apply ml-auto inline-flex items-center rounded-full px-1.5 py-px text-[10.5px] font-bold normal-case tracking-normal; }
+  .ad-delta.up { @apply bg-emerald-500/10 text-emerald-600 dark:text-emerald-400; }
+  .ad-delta.down { @apply bg-red-500/10 text-red-600 dark:text-red-400; }
+  .ad-delta.flat { @apply bg-zinc-100 text-zinc-500 dark:bg-zinc-800; }
+
+  /* ---------- etiquetas ---------- */
+  .ad-badge { @apply inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-zinc-200 bg-zinc-100 px-2 py-[3px] text-[11px] font-semibold leading-tight text-zinc-600 dark:border-white/10 dark:bg-zinc-800 dark:text-zinc-300; }
+  .ad-badge.ok { @apply border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400; }
+  .ad-badge.bad { @apply border-red-500/25 bg-red-500/10 text-red-600 dark:text-red-400; }
+  .ad-badge.warn { @apply border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400; }
+  .ad-badge.brand { @apply border-violet-500/25 bg-violet-500/15 text-violet-700 dark:text-violet-300; }
+  .ad-badge.solid { @apply border-zinc-900 bg-zinc-900 text-white dark:border-white dark:bg-white dark:text-zinc-900; }
+  .ad-badge.caps { @apply text-[11px] font-semibold; }
+  .ad-badge i { @apply h-1.5 w-1.5 rounded-full bg-current; }
+
+  /* ---------- botones ---------- */
+  .ad-btn { @apply inline-flex h-10 shrink-0 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border border-zinc-200 bg-white px-4 text-[12.5px] font-bold text-zinc-700 no-underline transition-all hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800; }
+  .ad-btn.primary, .ad-btn.blue { @apply border-zinc-900 bg-zinc-900 text-[12.5px] font-semibold text-white shadow-sm hover:bg-black hover:opacity-90 dark:border-white dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-100; }
+  .ad-btn.danger { @apply border-red-200 text-red-600 hover:bg-red-50 dark:border-red-500/30 dark:text-red-400 dark:hover:bg-red-500/10; }
+  .ad-btn.danger.solid { @apply border-red-500 bg-red-500 text-white hover:bg-red-600; }
+  .ad-btn.sm { @apply h-8 rounded-lg px-3 text-[11.5px]; }
+  .ad-btn.primary.sm { @apply text-[10px]; }
+  .ad-btn.lg { @apply h-11 px-5; }
+  .ad-btn.ghost { @apply border-transparent bg-transparent hover:bg-zinc-100 dark:bg-transparent dark:hover:bg-white/5; }
+  .ad-btn.block { @apply flex w-full; }
+  .ad-btn:disabled, .ad-btn[aria-disabled=true] { @apply pointer-events-none cursor-default opacity-50; }
+  .ad-btn:focus-visible, .ad-link:focus-visible, .ad-tab:focus-visible { @apply outline-none ring-2 ring-violet-500/50 ring-offset-2 ring-offset-transparent; }
+
+  .ad-seg { @apply inline-flex max-w-full flex-wrap gap-1.5; }
+  .ad-seg a, .ad-seg button, .ad-seg label { @apply cursor-pointer whitespace-nowrap rounded-xl bg-zinc-100 px-2.5 py-1.5 text-[11px] font-black text-zinc-600 no-underline hover:bg-zinc-200 dark:bg-zinc-800/70 dark:text-zinc-300 dark:hover:bg-zinc-700; }
+  .ad-seg a.on, .ad-seg button.on { @apply bg-zinc-900 text-white shadow-sm hover:bg-zinc-900 dark:bg-white dark:text-zinc-900; }
+  .ad-seg input { @apply pointer-events-none absolute opacity-0; }
+  .ad-seg input:checked + label { @apply bg-zinc-900 text-white dark:bg-white dark:text-zinc-900; }
+
+  /* ---------- tablas ---------- */
+  .ad-scroll { @apply overflow-x-auto; }
+  .ad-table { @apply w-full border-collapse text-[13px]; }
+  .ad-table th { @apply whitespace-nowrap border-b border-zinc-100 bg-zinc-50/60 px-4 py-2.5 text-left text-[12px] font-medium text-zinc-500 dark:border-white/[0.04] dark:bg-white/[0.015] dark:text-zinc-400; }
+  .ad-table td { @apply border-b border-zinc-100 px-4 py-3 align-middle text-zinc-700 dark:border-white/[0.04] dark:text-zinc-300; }
+  .ad-table tr:last-child td { @apply border-b-0; }
+  .ad-table tbody tr:hover td { @apply bg-zinc-50/70 dark:bg-white/[0.02]; }
+  .ad-table td b, .ad-table td strong { @apply text-zinc-900 dark:text-white; }
+  .ad-table .num { @apply whitespace-nowrap text-right; font-variant-numeric: tabular-nums; }
+  .ad-table .sub { @apply mt-0.5 block text-[11.5px] text-zinc-400; }
+
+  .ad-empty { @apply flex flex-col items-center px-6 py-12 text-center text-[12.5px] text-zinc-400; }
+  .ad-empty .ic { @apply mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-zinc-100 text-zinc-400 dark:bg-zinc-800; }
+  .ad-empty b { @apply mb-1 block text-[13.5px] font-bold text-zinc-600 dark:text-zinc-300; }
+
+  /* ---------- formularios ---------- */
+  .ad-form { @apply grid gap-4; }
+  .ad-form > *, .ad-field { @apply min-w-0; }
+  .ad-row { @apply grid gap-3.5; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+  .ad-field > label, .ad-field > .lbl { @apply mb-1.5 block text-[12.5px] font-medium text-zinc-600 dark:text-zinc-300; }
+  .ad-field small, .ad-hint { @apply mt-1.5 block text-[11.5px] font-medium leading-relaxed text-zinc-400 dark:text-zinc-500; }
+  .ad-field small b, .ad-hint b { @apply text-zinc-600 dark:text-zinc-300; }
+  .ad-in { @apply h-10 w-full min-w-0 rounded-xl border border-zinc-200 bg-zinc-50/50 px-3.5 text-[13px] font-medium text-zinc-900 outline-none transition-all duration-200 placeholder:text-zinc-400/80 focus:border-zinc-400 focus:bg-white focus:ring-4 focus:ring-zinc-900/5 dark:border-zinc-800 dark:bg-zinc-900/50 dark:text-zinc-100 dark:focus:border-zinc-600 dark:focus:bg-zinc-900 dark:focus:ring-white/5; }
+  textarea.ad-in { @apply h-auto min-h-[92px] resize-y py-3 leading-relaxed; }
+  select.ad-in { @apply cursor-pointer appearance-none bg-no-repeat pr-9 font-semibold;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-position: right 12px center; }
+  input[type=file].ad-in { @apply h-auto cursor-pointer py-2.5 text-[12px] file:mr-3 file:cursor-pointer file:rounded-lg file:border-0 file:bg-zinc-900 file:px-3 file:py-1.5 file:text-[11px] file:font-bold file:text-white dark:file:bg-white dark:file:text-zinc-900; }
+  .ad-in.mono { @apply font-mono text-[12px]; }
+  .ad-in[readonly] { @apply text-zinc-500; }
+  .ad-inrow { @apply flex min-w-0 items-stretch gap-2; }
+  .ad-inrow > .ad-in { @apply flex-1; }
+  .ad-check { @apply flex cursor-pointer items-center gap-2 text-[12.5px] font-semibold text-zinc-700 dark:text-zinc-300; }
+  .ad-check input { @apply h-4 w-4 accent-zinc-900 dark:accent-white; }
+  .ad-checks { @apply flex flex-wrap gap-2; }
+  .ad-checks label { @apply inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-1.5 text-[12px] font-bold text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900/50 dark:text-zinc-300; }
+  .ad-checks label:has(input:checked) { @apply border-zinc-900 bg-zinc-900 text-white dark:border-white dark:bg-white dark:text-zinc-900; }
+  .ad-checks input { @apply hidden; }
+  .ad-formfoot { @apply mt-1 flex flex-wrap items-center gap-3; }
+  .ad-res { @apply text-[12.5px] font-semibold; }
+  .ad-res.ok { @apply text-emerald-600 dark:text-emerald-400; }
+  .ad-res.bad { @apply text-red-600 dark:text-red-400; }
+  .ad-res ul { @apply mt-1.5 list-disc pl-5 font-medium text-zinc-600 dark:text-zinc-300; }
+
+  .ad-toggle { @apply flex cursor-pointer items-start gap-3 text-[13px]; }
+  .ad-toggle input { @apply pointer-events-none absolute h-px w-px opacity-0; }
+  .ad-switch { @apply relative mt-px h-[22px] w-[38px] shrink-0 rounded-full bg-zinc-300 transition-colors dark:bg-zinc-700; }
+  .ad-switch::after { content: ""; @apply absolute left-[3px] top-[3px] h-4 w-4 rounded-full bg-white shadow transition-transform; }
+  .ad-toggle input:checked + .ad-switch { @apply bg-zinc-900 dark:bg-violet-500; }
+  .ad-toggle input:checked + .ad-switch::after { transform: translateX(16px); }
+  .ad-toggle input:focus-visible + .ad-switch { @apply ring-2 ring-violet-500/50 ring-offset-2; }
+  .ad-toggle b { @apply block text-[13px] font-bold text-zinc-800 dark:text-zinc-100; }
+  .ad-toggle small { @apply mt-0.5 block text-[11.5px] font-medium text-zinc-400; }
+
+  .ad-color { @apply flex h-10 items-center gap-2 rounded-xl border border-zinc-200 bg-zinc-50/50 px-1.5 dark:border-zinc-800 dark:bg-zinc-900/50; }
+  .ad-color input[type=color] { @apply h-7 w-7 shrink-0 cursor-pointer border-0 bg-transparent p-0; }
+  .ad-color input[type=color]::-webkit-color-swatch-wrapper { padding: 0; }
+  .ad-color input[type=color]::-webkit-color-swatch { @apply rounded-lg border border-black/10; }
+  .ad-color .ad-in { @apply h-9 border-0 bg-transparent px-1 font-mono text-[12px] focus:ring-0 dark:bg-transparent; }
+
+  .ad-flash { @apply mb-4 flex gap-2 rounded-xl border px-3.5 py-3 text-[12.5px] font-semibold; }
+  .ad-flash.ok { @apply border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/25 dark:bg-emerald-500/10 dark:text-emerald-300; }
+  .ad-flash.bad { @apply border-red-100 bg-red-50 text-red-700 dark:border-red-900/40 dark:bg-red-950/20 dark:text-red-300; }
+  .ad-flash.warn { @apply border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-300; }
+
+  .ad-thumb { @apply h-[46px] w-9 shrink-0 rounded-md border border-zinc-100 bg-zinc-100 object-contain dark:border-white/5 dark:bg-zinc-800; }
+  .ad-prod { @apply flex min-w-0 items-center gap-3; }
+  .ad-prod b { @apply block truncate font-bold; }
+  .ad-copy { @apply min-w-0 truncate rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-2.5 font-mono text-[11.5px] text-zinc-700 dark:border-zinc-800 dark:bg-zinc-900/50 dark:text-zinc-300; }
+  .ad-copyfield { @apply flex min-w-0 items-stretch gap-2; }
+  .ad-copyfield .ad-copy { @apply flex flex-1 items-center; }
+  .ad-copyfield.wrap .ad-copy { @apply whitespace-pre-wrap break-all leading-relaxed; }
+  .ad-pre { @apply m-0 overflow-x-auto whitespace-pre rounded-xl bg-zinc-950 px-4 py-3.5 font-mono text-[11.5px] leading-relaxed text-zinc-200 dark:bg-black/50; }
+
+  .ad-dl { @apply m-0 grid gap-x-4 gap-y-2.5 text-[13px]; grid-template-columns: 170px minmax(0, 1fr); }
+  .ad-dl dt { @apply text-[12px] font-medium text-zinc-500 pt-0.5 dark:text-zinc-400; }
+  .ad-dl dd { @apply m-0 min-w-0 break-words text-zinc-800 dark:text-zinc-200; }
+
+  .ad-bars { @apply grid gap-2.5; }
+  .ad-bar { @apply grid gap-x-3 gap-y-1 text-[12.5px]; grid-template-columns: minmax(0, 1fr) auto; }
+  .ad-bar span { @apply truncate; }
+  .ad-bar b { @apply font-bold; font-variant-numeric: tabular-nums; }
+  .ad-bar div { @apply col-span-full h-1.5 overflow-hidden rounded bg-zinc-100 dark:bg-zinc-800; }
+  .ad-bar div i { @apply block h-full rounded bg-violet-500; }
+  .ad-progress { @apply h-1.5 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800; }
+  .ad-progress i { @apply block h-full rounded-full bg-violet-500 transition-all duration-300; }
+
+  .ad-funnel { @apply grid gap-2; }
+  .ad-step { @apply grid items-center gap-3 text-[12.5px]; grid-template-columns: 160px minmax(0, 1fr) 110px; }
+  .ad-step .track { @apply h-7 overflow-hidden rounded-lg bg-zinc-100 dark:bg-zinc-800; }
+  .ad-step .track i { @apply flex h-full min-w-[34px] items-center rounded-lg bg-gradient-to-r from-violet-600 to-violet-400 pl-2.5 text-[11px] font-bold not-italic text-white; }
+  .ad-step .pct { @apply text-right text-zinc-500; font-variant-numeric: tabular-nums; }
+
+  .ad-timeline { @apply m-0 grid list-none p-0; }
+  .ad-timeline li { @apply relative pb-3.5 pl-6 text-[12.5px]; }
+  .ad-timeline li::before { content: ""; @apply absolute left-[5px] top-1.5 h-2 w-2 rounded-full bg-violet-500; }
+  .ad-timeline li::after { content: ""; @apply absolute bottom-0 left-[8.5px] top-4 w-px bg-zinc-200 dark:bg-zinc-800; }
+  .ad-timeline li:last-child::after { display: none; }
+  .ad-timeline small { @apply block text-[11px] text-zinc-400; }
+
+  /* ---------- checklist (Configurá tu tienda) ---------- */
+  .ad-steps { @apply grid gap-2; }
+  .ad-steprow { @apply flex min-w-0 items-center gap-3 rounded-xl border border-zinc-100 px-4 py-3 dark:border-zinc-800; }
+  .ad-steprow .dot { @apply flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full border-[1.5px] border-zinc-300 text-white dark:border-zinc-600; }
+  .ad-steprow.done .dot { @apply border-emerald-500 bg-emerald-500; }
+  .ad-steprow .t { @apply min-w-0 flex-1 text-[13px] font-bold text-zinc-800 dark:text-zinc-100; }
+  .ad-steprow.done .t { @apply font-semibold text-zinc-400 dark:text-zinc-500; }
+  .ad-steprow .t small { @apply mt-0.5 block text-[11.5px] font-medium text-zinc-500 dark:text-zinc-400; }
+  .ad-steprow .go { @apply ml-auto shrink-0; }
+  .ad-steprow.hot { @apply border-violet-500/30 bg-violet-500/[0.06]; }
+
+  /* ---------- lista ✓ / ! / ✕ ---------- */
+  .ad-checklist { @apply m-0 grid list-none p-0; }
+  .ad-checklist li { @apply flex min-w-0 gap-3 border-t border-zinc-100 py-3 first:border-t-0 dark:border-white/[0.05]; }
+  .ad-checklist .st { @apply mt-px flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full text-[11px] font-black text-white; }
+  .ad-checklist .st.ok { @apply bg-emerald-500; }
+  .ad-checklist .st.warn { @apply bg-amber-500; }
+  .ad-checklist .st.bad { @apply bg-red-500; }
+  .ad-checklist .st.na { @apply bg-zinc-300 dark:bg-zinc-700; }
+  .ad-checklist b { @apply block text-[13px] font-bold text-zinc-800 dark:text-zinc-100; }
+  .ad-checklist p { @apply mt-0.5 break-words text-[12px] leading-relaxed text-zinc-500 dark:text-zinc-400; }
+  .ad-checklist .fix { @apply ml-auto shrink-0 self-center text-[12px]; }
+
+  /* ---------- Diagnóstico de tienda ---------- */
+  .ad-fab { @apply fixed bottom-5 right-5 z-[60] flex h-11 cursor-pointer items-center gap-2 rounded-full border border-black/[0.06] bg-white pl-3.5 pr-4 text-[12px] font-black text-zinc-800 shadow-[0_10px_30px_rgba(0,0,0,0.12)] hover:border-violet-300 dark:border-white/[0.08] dark:bg-zinc-900 dark:text-zinc-100 dark:hover:border-violet-500/40; }
+  .ad-fab svg { @apply text-violet-500; }
+  .ad-fab em { @apply flex h-5 min-w-[20px] items-center justify-center rounded-full px-1.5 text-[10px] font-black not-italic text-white; }
+  .ad-diag { @apply fixed bottom-[76px] right-5 z-[61] flex max-h-[min(72dvh,680px)] w-[420px] max-w-[calc(100vw-24px)] flex-col overflow-hidden rounded-[20px] border border-black/[0.08] bg-white shadow-2xl dark:border-white/[0.08] dark:bg-zinc-900; }
+  .ad-diag header { @apply flex items-center justify-between gap-2.5 border-b border-zinc-100 px-5 pb-3 pt-4 dark:border-white/[0.05]; }
+  .ad-diag header b { @apply text-[14px] font-bold; }
+  .ad-diag header p { @apply mt-0.5 text-[11.5px] text-zinc-500; }
+  .ad-diag .body { @apply overflow-y-auto px-5 pb-3.5 pt-1; }
+
+  /* ---------- Configuración (pantalla completa) ---------- */
+  .cfg { @apply flex min-h-screen flex-col; }
+  .cfg-top { @apply sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-zinc-200 bg-white/85 px-4 py-3.5 backdrop-blur-xl sm:px-7 dark:border-white/[0.05] dark:bg-[#09090b]/85; }
+  .cfg-top h1 { @apply text-[18px] font-bold tracking-tight sm:text-[20px]; }
+  .cfg-top p { @apply mt-0.5 text-[12px] font-medium text-zinc-500; }
+  .cfg-top p b { @apply text-zinc-900 dark:text-white; }
+  .cfg-x { @apply flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-zinc-200 bg-white text-zinc-500 shadow-sm hover:text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:hover:text-white; }
+  .cfg-wrap { @apply grid flex-1; grid-template-columns: 250px minmax(0, 1fr); }
+  .cfg-tabs { @apply border-r border-zinc-200 bg-white px-3 py-5 dark:border-white/[0.05] dark:bg-[#09090b]; }
+  .cfg-tabs > div { @apply sticky top-[88px] flex flex-col gap-1; }
+  .ad-tab { @apply block rounded-xl px-3 py-2 text-zinc-500 no-underline hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-white/[0.05] dark:hover:text-white; }
+  .ad-tab b { @apply block text-[12.5px] font-bold tracking-tight; }
+  .ad-tab small { @apply mt-px block text-[11px] font-medium text-zinc-400; }
+  .ad-tab.on { @apply bg-zinc-950 text-white shadow-md shadow-black/10 hover:bg-zinc-950 hover:text-white dark:bg-white dark:text-zinc-950; }
+  .ad-tab.on small { @apply text-zinc-400 dark:text-zinc-500; }
+  .cfg-main { @apply min-w-0 max-w-[1120px] px-4 pb-28 pt-6 sm:px-8 sm:pt-8; }
+
+  .ad-frame { @apply block w-full rounded-xl border-0 bg-[#f0f0f0]; }
+  .ad-preview { @apply rounded-2xl border border-zinc-100 bg-zinc-50 p-4 dark:border-white/[0.05] dark:bg-black/20; }
+  .ad-mock { @apply rounded-2xl bg-white p-5 text-[14px] text-zinc-900 shadow-sm; }
+
+  /* ---------- Inicio ---------- */
+  .ad-daynav { @apply inline-flex h-10 items-center gap-0.5 rounded-full border border-black/[0.06] bg-white px-1 shadow-sm dark:border-white/[0.06] dark:bg-zinc-900; }
+  .ad-daynav a { @apply flex h-8 w-8 items-center justify-center rounded-full text-zinc-400 no-underline hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-white/5 dark:hover:text-white; }
+  .ad-daynav input { @apply h-8 min-w-0 border-0 bg-transparent px-1 text-[12px] font-black text-zinc-700 outline-none dark:text-zinc-200; }
+  .ad-hero { @apply grid gap-4; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); }
+  .ad-split { @apply mt-5 grid grid-cols-2 gap-4 border-t border-zinc-100 pt-4 dark:border-white/[0.05]; }
+  .ad-live { @apply grid grid-cols-3 gap-4; }
+  .ad-livedot { @apply inline-flex items-center gap-1.5 text-[11.5px] font-medium text-emerald-600 dark:text-emerald-400; }
+  /* Punto verde que late: «esto se actualiza solo». */
+  .ad-pulsedot { @apply inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500; animation: livePulse 2s ease-in-out infinite; }
+  /* Selector chico de dos o tres opciones (p. ej. «En vivo | Ventas de hoy»). */
+  .ad-seg-sm { @apply inline-flex shrink-0 rounded-full border border-black/[0.06] bg-zinc-50 p-0.5 dark:border-white/[0.06] dark:bg-white/[0.03]; }
+  .ad-seg-sm > button { @apply whitespace-nowrap rounded-full px-3 py-1 text-[12px] font-medium text-zinc-500 transition-colors hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white; }
+  .ad-seg-sm > button[aria-selected=true] { @apply bg-white text-zinc-900 shadow-sm dark:bg-zinc-800 dark:text-white; }
+  .ad-livedot::before { content: ""; @apply h-1.5 w-1.5 rounded-full bg-emerald-500; animation: livePulse 2s ease-in-out infinite; }
+  .ad-flags { @apply mt-2 flex flex-wrap gap-1.5; }
+  .ad-flags span { @apply inline-flex items-center gap-1 rounded-lg bg-zinc-100 px-2 py-0.5 text-[11.5px] font-bold dark:bg-zinc-800; }
+
+  /* ---------- editor de checkout ---------- */
+  .cke-wrap { @apply grid items-start gap-4; grid-template-columns: minmax(0, 420px) minmax(0, 1fr); }
+  .cke-col { @apply min-w-0 rounded-2xl border border-black/[0.06] bg-white dark:border-white/[0.06] dark:bg-zinc-900; }
+  .cke-bar { @apply sticky top-0 z-10 flex items-center justify-between gap-3 rounded-t-2xl border-b border-zinc-100 bg-white/95 px-4 py-3 backdrop-blur dark:border-white/[0.05] dark:bg-zinc-900/95; }
+  .cke-list { @apply flex flex-col gap-2 p-3; }
+  .cke { @apply rounded-xl border border-zinc-100 bg-white dark:border-white/[0.06] dark:bg-zinc-900; }
+  .cke[open] { @apply border-zinc-200 shadow-sm dark:border-zinc-700; }
+  .cke > summary { @apply flex cursor-pointer list-none items-center gap-2.5 px-3.5 py-3 select-none; }
+  .cke > summary::-webkit-details-marker { display: none; }
+  .cke > summary b { @apply block text-[12.5px] font-bold text-zinc-900 dark:text-white; }
+  .cke > summary small { @apply mt-0.5 block truncate text-[11px] font-medium text-zinc-400; }
+  .cke-body { @apply grid gap-3.5 border-t border-zinc-100 px-3.5 pb-4 pt-3.5 dark:border-white/[0.05]; }
+  .cke-prev { @apply min-w-0 rounded-2xl border border-black/[0.06] bg-white p-4 dark:border-white/[0.06] dark:bg-zinc-900; }
+
+  /* ---------- esqueletos ---------- */
+  .sk { @apply block max-w-full shrink-0; background: linear-gradient(90deg, rgba(228, 228, 231, .7) 25%, rgba(244, 244, 245, .95) 50%, rgba(228, 228, 231, .7) 75%); background-size: 200% 100%; animation: apple-shimmer 1.6s ease-in-out infinite; }
+  .dark .sk { background: linear-gradient(90deg, rgba(39, 39, 42, .8) 25%, rgba(52, 52, 56, .95) 50%, rgba(39, 39, 42, .8) 75%); background-size: 200% 100%; }
+}
+
+/* ---------- cambio de período: lo de antes queda atenuado hasta que llegan los números nuevos ---------- */
+.ad-main .ad-card, .ad-main .ad-stat { transition: opacity .2s ease; }
+.ad-main[data-range-loading] .ad-card, .ad-main[data-range-loading] table { opacity: .5; }
+.ad-main[data-range-loading] [data-live] .ad-card, .ad-main[data-range-loading] [data-live] table { opacity: 1; }
+
+/* ---------- modo captura ---------- */
+.ad-root.privacy .pv-real { display: none; }
+.ad-root.privacy .pv::after { content: attr(data-pv); }
+/* Imágenes que identifican (tapas, logos): se corre el dibujo fuera del cuadro y queda un fondo neutro. */
+.ad-root.privacy img[data-pv-img], .ad-root.privacy .ad-thumb { object-position: -9999px -9999px; background: linear-gradient(135deg, #ede9fe, #c4b5fd) !important; }
+.ad-root.privacy [data-pv-blur], .ad-root.privacy .ad-copy, .ad-root.privacy .ad-diag .ad-checklist p,
+.ad-root.privacy .cfg-main dd:not(:has(.ad-badge)), .ad-root.privacy .cfg-main code, .ad-root.privacy .ad-pre { filter: blur(5px); }
+.ad-root.privacy iframe, .ad-root.privacy .ad-preview { filter: blur(12px); }
+.ad-root.privacy .pv-hide { visibility: hidden; }
+.ad-root.privacy .cke-body .ad-in, .ad-root.privacy .ad-dl dd a[href^="mailto"] { filter: blur(4px); }
+
+/* La configuración tapa el menú del panel, como en Winnerfy. */
+.ad:has(.cfg) .ad-side, .ad:has(.cfg) .ad-mobilebar, .ad:has(.cfg) .ad-mobilespace { display: none; }
+.ad-main:has(.cfg) { padding: 0; max-width: none; }
+/* Inicio con el panel derecho (libros por escribir, catálogos y Stripe): usa el ancho de la pantalla. */
+.ad-main:has(.home-split) { max-width: 1760px; }
+
+@keyframes apple-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+@keyframes livePulse { 0%, 100% { opacity: 1; } 50% { opacity: .4; } }
+@media (prefers-reduced-motion: reduce) { .sk, .shimmer-bg, .live-dot, .ad-livedot::before, .ad-pulsedot { animation: none; } }
+
+@media (min-width: 1101px) {
+  .cke-prev { position: sticky; top: 16px; }
+}
+@media (max-width: 1100px) {
+  .ad-hero { grid-template-columns: minmax(0, 1fr); }
+  .cke-wrap { grid-template-columns: minmax(0, 1fr); }
+  .cfg-wrap { grid-template-columns: 220px minmax(0, 1fr); }
+}
+@media (max-width: 1023px) {
+  .g-21, .g-2, .g-11 { grid-template-columns: minmax(0, 1fr); }
+  .ad-step { grid-template-columns: 110px minmax(0, 1fr) 70px; }
+  .ad-dl { grid-template-columns: 120px minmax(0, 1fr); }
+  .ad-table th, .ad-table td { padding-left: 12px; padding-right: 12px; }
+  .hide-m { display: none; }
+  .ad-table .ad-prod b { white-space: normal; }
+  /* Emails largos: se cortan con … para que el total y el estado entren en pantalla. */
+  .ad-table td:first-child { max-width: 190px; }
+  .ad-table td:first-child .sub, .ad-table td:first-child b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ad-live { grid-template-columns: 1fr 1fr; }
+  .cfg-wrap { grid-template-columns: minmax(0, 1fr); }
+  .cfg-tabs { position: sticky; top: 61px; z-index: 15; border-right: 0; border-bottom: 1px solid var(--line); padding: 8px 12px; }
+  .cfg-tabs > div { position: static; flex-direction: row; overflow-x: auto; scrollbar-width: none; }
+  .cfg-tabs > div::-webkit-scrollbar { display: none; }
+  .ad-tab { flex-shrink: 0; white-space: nowrap; }
+  .ad-tab small { display: none; }
+  .ad-fab { right: 14px; bottom: 14px; }
+  .ad-fab span.l { display: none; }
+  .ad-diag { left: 12px; right: 12px; bottom: 68px; width: auto; max-width: none; }
+  .ad-steprow { flex-wrap: wrap; }
+  .ad-steprow .go { margin-left: 34px; }
+}
+@media (max-width: 420px) {
+  .ad-split { grid-template-columns: 1fr; }
+  .ad-copyfield { flex-wrap: wrap; }
+  .ad-copyfield .ad-copy { flex-basis: 100%; }
+}
+
+/* Tabla de campañas: en el celular la columna del nombre es angosta (2 renglones, tocar = entero) y no queda fija. */
+/* Tabla de campañas de ancho fijo: el nombre a su medida (124 px en el celular, 260 px en la compu)
+   y los números en columnas parejas, alineadas a la derecha. */
+.ct-table { min-width: calc(124px + 7 * 78px); }
+.ct-col-name { width: 124px; }
+.ct-col-num { width: 78px; }
+/* En la compu el nombre se lee ENTERO: 340 px y los renglones que haga falta. Más Presupuesto y Puja. */
+@media (min-width: 768px) { .ct-table { min-width: calc(340px + 9 * 92px); } .ct-col-name { width: 340px; } .ct-col-num { width: auto; } .ct-col-edit { width: 112px; } }
+.ct-namecell { padding-left: var(--plm, 8px); }
+.ct-name { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; cursor: pointer; }
+.ct-name-full { overflow-wrap: anywhere; cursor: pointer; }
+@media (min-width: 768px) {
+  .ct-namecell { padding-left: var(--pl, 12px); }
+  .ct-name, .ct-name-full { display: block; overflow: visible; white-space: normal; overflow-wrap: anywhere; cursor: default; }
+}
+/* Ofertas activas en el celular: el nombre más angosto para que entren los números. */
+@media (max-width: 767px) { .ad-table td.ov-name { max-width: 150px; } }
+/* Últimas compras: la que llega entra arriba y se resalta un momento. */
+@keyframes ad-fresh-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+.ad-fresh { animation: ad-fresh-in .45s ease-out; background-color: rgba(16, 185, 129, .10); }
+/* Navegando: barra arriba y la página un poco atenuada (si tarda más de 150 ms). */
+@keyframes ad-nav { 0% { transform: translateX(-100%); } 60% { transform: translateX(10%); } 100% { transform: translateX(100%); } }
+.ad-navbar { position: fixed; inset: 0 0 auto 0; height: 3px; z-index: 500; overflow: hidden; pointer-events: none; }
+.ad-navbar::before { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, #8b5cf6, #3b82f6, transparent); animation: ad-nav 1.1s ease-in-out infinite; }
+.ad-main[data-nav] { opacity: .55; transition: opacity .2s ease .15s; }

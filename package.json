@@ -1,0 +1,51 @@
+{
+  "name": "checkout-base",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "setup": "node scripts/setup.mjs",
+    "setup:check": "node scripts/setup.mjs --check",
+    "smoke": "node scripts/smoke.mjs",
+    "check:links": "node --experimental-strip-types scripts/check-public-url.mjs",
+    "test:pujas": "node --experimental-strip-types --test scripts/test-pujas.mjs",
+    "test:autopilot": "node --experimental-strip-types --test scripts/test-autopilot.mjs",
+    "test": "npm run check:links && npm run test:pujas && npm run test:autopilot",
+    "deploy:safe": "bash scripts/deploy-safe.sh"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "^2.3.1",
+    "@stripe/react-stripe-js": "^6.10.0",
+    "@stripe/stripe-js": "^9.16.0",
+    "@supabase/supabase-js": "^2.116.0",
+    "autoprefixer": "^10.6.1",
+    "clsx": "^2.1.1",
+    "imapflow": "^2.2.5",
+    "lucide-react": "^1.52.0",
+    "mailparser": "^3.9.36",
+    "mcp-handler": "^2.2.0",
+    "next": "15.5.25",
+    "nodemailer": "^7.0.13",
+    "postcss": "^8.5.29",
+    "react": "19.1.9",
+    "react-dom": "19.1.9",
+    "recharts": "^2.15.4",
+    "sharp": "^0.35.4",
+    "stripe": "18.5.0",
+    "tailwind-merge": "^3.7.0",
+    "tailwindcss": "^3.4.19",
+    "web-push": "^3.6.7",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/mailparser": "^3.9.0",
+    "@types/node": "22.15.0",
+    "@types/nodemailer": "^8.0.2",
+    "@types/react": "19.1.9",
+    "@types/web-push": "^3.6.4",
+    "typescript": "5.9.2"
+  }
+}
