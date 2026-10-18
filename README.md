@@ -73,7 +73,7 @@ npx vercel --prod          # primer deploy
    ```
    Esto agrega las 16 tareas programadas de pg_cron: entregas pendientes, carritos, buzón, Meta, monitor, reconciliación de pagos y email marketing. Todas llaman a `https://<tu-app>/api/cron/*` con `CRON_SECRET`.
 
-`vercel.json` publica en la región `fra1` (Frankfurt). Si tu base de Supabase está en otra región, cambiala a la más cercana.
+`vercel.json` publica en la región `iad1` (Washington DC), que es la más cercana a la base de Supabase de esta instalación (`us-east-2`, Ohio). Si movés la base de región, cambiá esta también: con la app y la base en continentes distintos, cada consulta del checkout cruza el océano dos veces.
 
 ### 6. Conectar Claude por MCP (1 min)
 Las tiendas, productos y checkouts se crean desde Claude. En el panel: **Guía de la app → «Crear link para compartir»** o **Configuración → Acceso API → crear un token**. Después:
