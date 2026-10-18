@@ -18,6 +18,13 @@ const config: NextConfig = {
   // No usamos next/image: todas las tapas van con <img>. Apagar el
   // optimizador deja inerte /_next/image y con eso la superficie de sharp.
   images: { unoptimized: true },
+  // Librerias de servidor que no se empaquetan: las carga Node directamente.
+  // nodemailer 10 movio sus modulos de lib/ a dist/ y los publica por el mapa
+  // "exports" del paquete; el empaquetador busca la ruta fisica lib/... y no la
+  // encuentra. Node si la resuelve, asi que dejarlas fuera del bundle arregla
+  // el import de mail-composer en src/lib/inbox.ts y ademas evita empaquetar
+  // tres librerias que solo corren en el servidor.
+  serverExternalPackages: ["nodemailer", "imapflow", "mailparser"],
   poweredByHeader: false,
   async rewrites() {
     return {
