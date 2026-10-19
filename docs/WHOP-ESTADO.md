@@ -67,6 +67,30 @@ ledger). La app solo cobra, entrega y reembolsa: nunca saca plata de la cuenta.
 Si la llave se filtra sin esos permisos, el peor caso es cobrarle a los propios
 clientes, que es reversible.
 
+## Cobro: el link hospedado de Whop
+
+    https://whop.com/checkout/ch_Xx8d6OM8hySpKcF/   (ch_Xx8d6OM8hySpKcF)
+
+Guardado en `funnels.checkout_host` + `checkout_path` del embudo `kit`, con la
+metadata tienda/embudo/producto adentro, que es lo que permite al webhook saber
+que entregar.
+
+**Por que el link y no el formulario embebido.** Whop tiene elementos
+embebibles (`@whop/elements`, con createConfirmationToken, igual que Stripe
+Elements), asi que la reescritura es posible. Pero son 961 lineas de checkout
+-- formulario, Apple Pay, pago diferido, recalculo con bumps -- mas un endpoint
+nuevo de tokens, tocando el unico circuito que no se puede caer. Reescribirlo
+para ganar conversion en un producto que todavia no vendio una unidad es
+optimizar antes de medir. El link cobra hoy; el formulario se hace cuando haya
+numeros que digan cuanto vale cada punto.
+
+Lo que el link NO cuesta: el control de la tarjeta. `member_id` y
+`payment_method_id` llegan igual en payment.succeeded, asi que el upsell de 1
+clic queda disponible sin cambiar nada.
+
+Los bonos NO necesitan variante en Whop: son gratis y `fulfill` los entrega
+desde el embudo, no desde el pago. Solo harian falta si se vendieran sueltos.
+
 ## Lo que falta despues de la llave
 
 1. `connect_whop` por MCP: guardar llave y secreto cifrados en `store_whop`.
