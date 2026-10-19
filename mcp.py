@@ -6,7 +6,12 @@
 """
 import json, sys, urllib.request, pathlib
 
-BASE = "http://localhost:3100/api/mcp"
+# Por defecto habla con la app LOCAL. Para operaciones cuyo efecto vive en
+# produccion -- connect_stripe registra el webhook usando PUBLIC_BASE_URL del
+# servidor que atiende -- hay que apuntar a Vercel:
+#   MCP_BASE=https://checkout-eta-six.vercel.app/api/mcp python3 mcp.py ...
+import os
+BASE = os.environ.get("MCP_BASE", "http://localhost:3100/api/mcp")
 TOK = pathlib.Path(".mcp-token").read_text().strip()
 _sid = None
 
