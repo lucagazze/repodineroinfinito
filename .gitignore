@@ -14,3 +14,6 @@ next-env.d.ts
 
 # config local del preview
 .claude/
+
+# clave MCP del panel
+.mcp-token
