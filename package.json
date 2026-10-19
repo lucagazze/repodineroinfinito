@@ -13,8 +13,9 @@
     "check:links": "node --experimental-strip-types scripts/check-public-url.mjs",
     "test:pujas": "node --experimental-strip-types --test scripts/test-pujas.mjs",
     "test:autopilot": "node --experimental-strip-types --test scripts/test-autopilot.mjs",
-    "test": "npm run check:links && npm run test:pujas && npm run test:autopilot",
-    "deploy:safe": "bash scripts/deploy-safe.sh"
+    "test": "npm run check:links && npm run test:pujas && npm run test:autopilot && npm run test:whop",
+    "deploy:safe": "bash scripts/deploy-safe.sh",
+    "test:whop": "node --experimental-strip-types scripts/check-whop-firma.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "^2.3.1",
