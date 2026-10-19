@@ -30,8 +30,11 @@ export async function findOrder(ref: string | undefined) {
   const bd = ch?.billing_details;
   // Si el mail falla, el webhook lo reintenta; el comprador igual ve su descarga.
   await fulfill({
-    stripe,
-    paymentIntentId: pi.id,
+    completarComprador: async (email, name) => {
+      if (!pi.customer) return;
+      await stripe.customers.update(String(pi.customer), { email, name: name ?? undefined });
+    },
+    paymentId: pi.id,
     customerId: pi.customer ? String(pi.customer) : null,
     email: bd?.email ?? pi.receipt_email ?? null,
     name: bd?.name ?? null,

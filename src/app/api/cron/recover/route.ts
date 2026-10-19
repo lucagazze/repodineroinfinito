@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
       const ch = typeof pi.latest_charge === "object" ? pi.latest_charge : null;
       const bd = ch?.billing_details;
       await fulfill({
-        stripe, paymentIntentId: pi.id, customerId: pi.customer ? String(pi.customer) : null,
+        paymentId: pi.id, customerId: pi.customer ? String(pi.customer) : null,
         email: bd?.email ?? pi.receipt_email ?? null, name: bd?.name ?? null, phone: bd?.phone ?? null,
         country: bd?.address?.country ?? null, currency: pi.currency,
         amountTotal: fromMinor(pi.amount_received, pi.currency), metadata: pi.metadata ?? {}, paid: pi.status === "succeeded",

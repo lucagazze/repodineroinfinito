@@ -1,4 +1,3 @@
-import type Stripe from "stripe";
 import { withBrand } from "./brand";
 import { createHmac } from "crypto";
 import { db, getFunnel, getProductById, itemsByRole, type Product } from "./db";
@@ -29,8 +28,11 @@ const RANK: Record<string, number> = { failed: 0, pending: 1, paid: 2, refunded:
 const CLAIM_LEASE_MS = 2 * 60_000;
 
 export async function fulfill(args: {
-  stripe: Stripe;
-  paymentIntentId: string;
+  /** Que pasarela cobro. Define como se lee el id, no como se entrega. */
+  provider?: "stripe" | "whop";
+  /** Id del pago en su pasarela. Se guarda en stripe_payment_intent por
+   *  compatibilidad: la columna es anterior a que hubiera dos pasarelas. */
+  paymentId: string;
   customerId: string | null;
   email: string | null;
   name: string | null;
@@ -38,15 +40,22 @@ export async function fulfill(args: {
   country: string | null;
   currency: string;
   amountTotal: number;
-  metadata: Stripe.Metadata;
+  metadata: Record<string, string>;
   sessionId?: string | null;
   paid: boolean;
+  /**
+   * Lo unico que esta funcion hacia contra Stripe: completar el cliente en su
+   * panel una vez que se sabe quien es. Ahora lo trae quien llama, asi la
+   * entrega no sabe nada de ninguna pasarela. Lo que falle aca no corta la
+   * entrega: es cosmetico del lado del proveedor.
+   */
+  completarComprador?: (email: string, name: string | null) => Promise<void>;
 }) {
   const storeSlug = args.metadata.store;
   const funnelSlug = args.metadata.funnel;
   const locale = (args.metadata.locale as Locale) ?? DEFAULT_LOCALE;
   if (!storeSlug || !funnelSlug) {
-    console.error("[fulfill] sin metadata de tienda/embudo:", args.paymentIntentId);
+    console.error("[fulfill] sin metadata de tienda/embudo:", args.paymentId);
     return { skipped: "metadata" as const };
   }
 
@@ -54,10 +63,10 @@ export async function fulfill(args: {
   if (!funnel) {
     // Pago cobrado de un embudo que ya no existe: que Stripe reintente y que
     // quede a la vista en la bitácora, no que se pierda en silencio.
-    throw new Error(`embudo desconocido ${storeSlug}/${funnelSlug} (${args.paymentIntentId})`);
+    throw new Error(`embudo desconocido ${storeSlug}/${funnelSlug} (${args.paymentId})`);
   }
 
-  const key = args.sessionId ?? args.paymentIntentId;
+  const key = args.sessionId ?? args.paymentId;
   const { data: prev } = await db
     .from("orders")
     .select("id,status")
@@ -72,8 +81,9 @@ export async function fulfill(args: {
   const row: Record<string, unknown> = {
     store_id: funnel.stores.id,
     funnel_id: funnel.id,
-    stripe_payment_intent: args.paymentIntentId,
+    stripe_payment_intent: args.paymentId,
     stripe_session_id: key,
+    provider: args.provider ?? "stripe",
     locale,
     currency: args.currency.toUpperCase(),
     amount_total: args.amountTotal,
@@ -110,7 +120,7 @@ export async function fulfill(args: {
     const { data: ck } = await db
       .from("checkouts")
       .select("utm,tracking")
-      .eq("stripe_payment_intent", args.paymentIntentId)
+      .eq("stripe_payment_intent", args.paymentId)
       .maybeSingle();
     if (ck) { row.utm = ck.utm ?? {}; row.tracking = ck.tracking ?? {}; }
   }
@@ -132,7 +142,7 @@ export async function fulfill(args: {
   if (order.status === "paid") {
     await db.from("checkouts")
       .update({ status: "paid", order_id: order.id, ...(args.email ? { email: args.email } : {}) })
-      .eq("stripe_payment_intent", args.paymentIntentId);
+      .eq("stripe_payment_intent", args.paymentId);
     // Aviso del pedido al panel: YA, apenas se cobra (como la plataforma anterior). Cada post-compra manda el suyo.
     const bumpCount = String(args.metadata.bumps ?? "").split(",").filter(Boolean).length;
     later(() => pushSaleOnce(order.id, bumpCount));
@@ -161,12 +171,11 @@ export async function fulfill(args: {
   const attempts = (claimed[0].delivery_attempts ?? 0) + 1;
 
   try {
-    // El Customer se creó vacío al abrir el checkout; ahora que sabemos quién
-    // es, lo completamos para que se entienda en el dashboard de Stripe.
-    if (args.customerId && args.email) {
-      await args.stripe.customers
-        .update(args.customerId, { email: args.email, name: args.name ?? undefined })
-        .catch((e) => console.warn("[fulfill] no se pudo completar el customer:", e.message));
+    // El comprador se completa en el panel de la pasarela, si quien llama
+    // sabe como. Con Whop no hace falta: el pago ya viene con el usuario.
+    if (args.email && args.completarComprador) {
+      await args.completarComprador(args.email, args.name)
+        .catch((e: Error) => console.warn("[fulfill] no se pudo completar el comprador:", e.message));
     }
 
     const main = funnel.main_product_id ? await getProductById(funnel.main_product_id) : null;
@@ -198,7 +207,7 @@ export async function fulfill(args: {
         })),
         ...bumps.map((b) => ({
           order_id: order.id, product_id: b.id, kind: "bump" as const, amount: bumpPrice(b), currency: cur,
-          stripe_payment_intent: args.paymentIntentId,
+          stripe_payment_intent: args.paymentId,
         })),
       ]);
       if (e2) throw new Error(`no se pudieron guardar los items: ${e2.message}`);
@@ -286,16 +295,22 @@ export async function notifySale(orderId: string) {
  * Reembolsos: parciales o totales, del pago principal o de un upsell. El
  * pedido pasa a "reembolsado" solo si se devolvió todo el pago principal.
  */
-export async function applyRefund(charge: Stripe.Charge) {
-  if (!charge.payment_intent) return;
-  const pi = String(charge.payment_intent);
-  const refunded = charge.amount_refunded / (["jpy", "krw", "clp", "vnd"].includes(charge.currency) ? 1 : 100);
+export async function applyRefund(args: {
+  /** Id del pago en su pasarela, el mismo que guardo fulfill. */
+  paymentId: string;
+  /** Devuelto, en unidades MAYORES ya convertidas por quien llama. */
+  refunded: number;
+  /** true si se devolvio el pago entero: solo entonces el pedido pasa a reembolsado. */
+  total: boolean;
+}) {
+  const pi = args.paymentId;
+  const refunded = args.refunded;
 
   const { data: order } = await db.from("orders").select("id,status").eq("stripe_payment_intent", pi).maybeSingle();
   if (order) {
     await db.from("orders").update({
       amount_refunded: refunded,
-      ...(charge.refunded ? { status: "refunded", refunded_at: new Date().toISOString() } : {}),
+      ...(args.total ? { status: "refunded", refunded_at: new Date().toISOString() } : {}),
     }).eq("id", order.id);
     return;
   }

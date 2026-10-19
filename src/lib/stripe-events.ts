@@ -62,8 +62,11 @@ async function process(
       const ch = pi.latest_charge ? await stripe.charges.retrieve(String(pi.latest_charge)) : null;
       const bd = ch?.billing_details;
       await fulfill({
-        stripe,
-        paymentIntentId: pi.id,
+        completarComprador: async (email, name) => {
+          if (!pi.customer) return;
+          await stripe.customers.update(String(pi.customer), { email, name: name ?? undefined });
+        },
+        paymentId: pi.id,
         customerId: pi.customer ? String(pi.customer) : null,
         email: bd?.email ?? pi.receipt_email ?? null,
         name: bd?.name ?? null,
@@ -83,8 +86,11 @@ async function process(
       const pi = event.data.object as Stripe.PaymentIntent;
       if (pi.metadata?.kind === "upsell") return {};
       await fulfill({
-        stripe,
-        paymentIntentId: pi.id,
+        completarComprador: async (email, name) => {
+          if (!pi.customer) return;
+          await stripe.customers.update(String(pi.customer), { email, name: name ?? undefined });
+        },
+        paymentId: pi.id,
         customerId: pi.customer ? String(pi.customer) : null,
         email: pi.receipt_email ?? null,
         name: null, phone: null, country: null,
@@ -103,7 +109,19 @@ async function process(
     }
 
     case "charge.refunded":
-      await applyRefund(event.data.object as Stripe.Charge);
+      {
+        // La conversion a unidades mayores vivia dentro de applyRefund, que
+        // ahora no sabe de Stripe: la hace quien conoce el formato del cobro.
+        const ch = event.data.object as Stripe.Charge;
+        if (ch.payment_intent) {
+          const sinDecimales = ["jpy", "krw", "clp", "vnd"].includes(ch.currency);
+          await applyRefund({
+            paymentId: String(ch.payment_intent),
+            refunded: ch.amount_refunded / (sinDecimales ? 1 : 100),
+            total: !!ch.refunded,
+          });
+        }
+      }
       return {};
 
     case "charge.dispute.created": {
