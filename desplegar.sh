@@ -22,7 +22,11 @@ fi
 # 2) primer despliegue, para tener una direccion
 echo
 echo "  --- publicando ---"
-URL=$($V --prod --yes 2>&1 | tee /tmp/vercel.log | grep -oE 'https://[a-zA-Z0-9.-]+\.vercel\.app' | tail -1)
+$V --prod --yes 2>&1 | tee /tmp/vercel.log | tail -2
+# La direccion NO se lee de la salida del deploy: el primer despliegue falla
+# (sin variables) y su URL efimera es la que imprime. La estable es la que
+# "project ls" llama "Latest Production URL".
+URL=$($V project ls 2>/dev/null | awk '$1=="checkout"{print $2}' | head -1)
 if [ -z "$URL" ]; then echo "  no pude leer la direccion:"; tail -20 /tmp/vercel.log; exit 1; fi
 echo "  direccion: $URL"
 
