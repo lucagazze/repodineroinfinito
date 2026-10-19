@@ -17,3 +17,4 @@ next-env.d.ts
 
 # clave MCP del panel
 .mcp-token
+.vercel-url
