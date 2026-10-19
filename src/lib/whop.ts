@@ -5,8 +5,10 @@ import { decrypt } from "@/lib/secrets";
  * Cobrar con Whop, en paralelo a Stripe.
  *
  * Lo que cambia respecto de Stripe y condiciona todo lo demas:
- *  - No hay montos libres. Todo lo que se cobra es un PLAN ya creado en Whop,
- *    asi que cada producto nuestro lleva su `whop_plan_id`.
+ *  - Todo lo que se cobra es una VARIANTE ya creada en Whop (el campo sigue
+ *    llamandose plan_id), asi que cada producto nuestro lleva su whop_plan_id.
+ *    Varias variantes entran en un mismo cobro con `line_items`: con eso los
+ *    order bumps funcionan sin inventar una variante por combinacion.
  *  - Cobrar con la tarjeta guardada es ASINCRONO: `payments.create` contesta
  *    enseguida con el pago abierto y el resultado llega despues por webhook.
  *    El post-pago de 1 clic no puede dar por buena la respuesta inmediata.
@@ -74,23 +76,49 @@ export function verCuenta(apiKey: string) {
 }
 
 /**
- * Cobra con una tarjeta ya guardada (el 1 clic del post-pago).
+ * Cobra con una tarjeta ya guardada: el 1 clic del post-pago.
+ *
+ * `offSession: false` NO es un detalle. El comprador esta presente -- acaba de
+ * apretar el boton del upsell -- y asi el cobro se procesa como iniciado por el
+ * cliente con tarjeta en archivo, que aprueba mejor. Ademas, si el banco pide
+ * autenticacion, el pago vuelve con status `requires_action` y un `next_action`
+ * a donde mandarlo; con off_session en true esa compra simplemente se cae.
+ * Por eso `returnUrl` es obligatorio en ese modo.
+ *
  * Devuelve el pago ABIERTO: el resultado real llega por webhook.
  */
 export function cobrarGuardada(apiKey: string, args: {
   accountId: string;
-  planId: string;
+  planId?: string;
+  /** Varias variantes en un mismo cobro (principal + bumps). */
+  lineItems?: Array<{ plan_id: string }>;
   memberId: string;
   paymentMethodId: string;
+  /** A donde vuelve el comprador tras un 3D Secure. Obligatoria si esta presente. */
+  returnUrl?: string;
+  /** true solo para cobros sin el comprador delante (renovaciones). */
+  offSession?: boolean;
   metadata?: Record<string, string>;
+  /** Misma clave = mismo cobro: reintentar no cobra dos veces. */
+  idempotencyKey?: string;
 }) {
-  return pedir<{ id: string; status: string }>(apiKey, "/payments", {
+  const presente = args.offSession !== true;
+  if (presente && !args.returnUrl) {
+    throw new Error("cobrarGuardada: falta returnUrl (obligatoria con off_session false)");
+  }
+  if (!args.planId && !args.lineItems?.length) {
+    throw new Error("cobrarGuardada: hace falta planId o lineItems");
+  }
+  return pedir<{ id: string; status: string; next_action?: unknown }>(apiKey, "/payments", {
     method: "POST",
+    ...(args.idempotencyKey ? { headers: { "idempotency-key": args.idempotencyKey } } : {}),
     body: JSON.stringify({
       account_id: args.accountId,
-      plan_id: args.planId,
+      ...(args.lineItems?.length ? { line_items: args.lineItems } : { plan_id: args.planId }),
       member_id: args.memberId,
       payment_method_id: args.paymentMethodId,
+      off_session: !presente,
+      ...(args.returnUrl ? { return_url: args.returnUrl } : {}),
       ...(args.metadata ? { metadata: args.metadata } : {}),
     }),
   });
