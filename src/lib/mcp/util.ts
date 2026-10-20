@@ -102,13 +102,22 @@ async function audit(tool: string, args: unknown, ok: boolean, summary: string, 
 
 // ---------------------------------------------------------------- búsquedas
 
+/**
+ * OJO: lista EXPLICITA. Una columna nueva que no se agregue aqui llega como
+ * `undefined` sin un solo error, y el codigo que la lee toma su valor por
+ * defecto en silencio. Paso dos veces con `gateway`: el diagnostico daba
+ * "la tienda no puede cobrar" en una tienda que cobra perfectamente con Whop.
+ */
 export const STORE_FULL_COLS =
   "id,slug,name,display_name,domain,catalog_domain,support_email,default_locale,guarantee_days,timezone,email_from," +
+  "gateway," +
   "legal_name,legal_address,statement_descriptor,logo_url,brand,business,thankyou,delivery_email,sales_webhook_url," +
   "meta_ad_account_id,meta_pixel_id,active,created_at,updated_at";
 
 export type StoreRow = {
   id: string; slug: string; name: string; display_name: string | null; domain: string | null; catalog_domain: string | null;
+  /** Pasarela con la que cobra la tienda: stripe | whop. */
+  gateway?: "stripe" | "whop";
   support_email: string; default_locale: string; guarantee_days: number; timezone: string; email_from: string | null;
   legal_name: string | null; legal_address: string | null; statement_descriptor: string | null; logo_url: string | null;
   brand: Record<string, unknown>; business: Record<string, unknown>; thankyou: Record<string, unknown>;
@@ -133,13 +142,17 @@ export async function getStore(slug: string): Promise<StoreRow> {
 }
 
 export const PRODUCT_COLS =
-  "id,store_id,slug,name,short_name,description,kind,delivery_url,delivery_links,image_url,email_image_url,sort_order," +
+  "id,store_id,slug,name,short_name,description,kind,delivery_url,delivery_links,delivery_file,image_url,email_image_url,sort_order," +
   "active,show_in_catalog,created_at,updated_at,product_prices(currency,amount,compare_at,display_value)";
 
 export type PriceRow = { currency: string; amount: number | string | null; compare_at: number | string | null; display_value: number | string | null };
 export type ProductRow = {
   id: string; store_id: string; slug: string; name: string; short_name: string; description: string; kind: string;
-  delivery_url: string | null; delivery_links: { label: string; url: string }[] | null; image_url: string | null;
+  delivery_url: string | null; delivery_links: { label: string; url: string }[] | null;
+  /** Archivo propio en el bucket privado. Entrega tan valida como un link,
+   *  y mas segura: se sirve con un enlace firmado de 10 minutos. */
+  delivery_file: string | null;
+  image_url: string | null;
   email_image_url: string | null; sort_order: number; active: boolean; show_in_catalog: boolean;
   created_at: string; updated_at: string; product_prices: PriceRow[];
 };

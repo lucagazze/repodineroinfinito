@@ -120,7 +120,7 @@ export async function checkoutDetail(store: StoreRow, f: FunnelRow) {
   if (!main) warnings.push("No main product: the checkout URL returns 404 until one is set (update_checkout main_product).");
   else if (!main.product_prices.some((x) => num(x.amount))) warnings.push(`Main product "${main.slug}" has no price: the checkout cannot charge.`);
   else if (!main.product_prices.some((x) => x.currency === "USD" && num(x.amount))) warnings.push(`Main product "${main.slug}" has no USD price: buyers outside its fixed-price markets cannot be quoted (conversion starts from USD).`);
-  if (main && !main.delivery_url && !(main.delivery_links ?? []).length) warnings.push(`Main product "${main.slug}" has no delivery_url / delivery_links: buyers would get an email without download link.`);
+  if (main && !main.delivery_url && !(main.delivery_links ?? []).length && !main.delivery_file) warnings.push(`Main product "${main.slug}" has nothing to deliver (no link and no file): buyers would get an email without a download button.`);
   if (!f.active) warnings.push("Checkout is paused (active=false): its URL returns 404.");
 
   return {
@@ -365,6 +365,27 @@ export function registerReadTools(server: McpServer) {
             .order("created_at", { ascending: false }).limit(10),
         ]);
 
+      // Pasarela de cobro. La tienda ELIGE con cual cobra (stores.gateway), asi
+      // que revisar Stripe en una tienda de Whop da un "error" que no existe --
+      // y un diagnostico que grita en falso entierra los problemas de verdad.
+      const pasarela = s.gateway === "whop" ? "whop" : "stripe";
+      if (pasarela === "whop") {
+        const { data: w } = await db.from("store_whop")
+          .select("company_id,webhook_id,webhook_secret_enc,livemode,last_event_at")
+          .eq("store_id", s.id).maybeSingle();
+        if (!w) {
+          add("error", "whop_account", "The store charges with Whop but has no Whop connection: the checkout cannot charge.", "connect_whop with the account's API key.");
+        } else {
+          add("ok", "whop_account", `Whop account ${w.company_id}${w.livemode ? "" : " (TEST mode)"}`);
+          add(w.webhook_secret_enc ? "ok" : "error", "whop_webhook",
+              w.webhook_secret_enc ? `Webhook ${w.webhook_id} with signing secret`
+                                   : "Webhook without signing secret: every event is rejected and NOTHING gets delivered.",
+              "Recreate the webhook capturing its ws_ secret.");
+          add(w.last_event_at ? "ok" : "warn", "whop_last_event",
+              w.last_event_at ? `Last Whop event received ${w.last_event_at}` : "No Whop event received yet.",
+              "Make a test purchase.");
+        }
+      } else {
       // Stripe
       const env = envStripe();
       if (!health.connected) {
@@ -385,9 +406,19 @@ export function registerReadTools(server: McpServer) {
         }
       }
 
-      // Mail
+      }
+
+      // Mail. Una tienda puede mandar por su PROPIA casilla (store_mail) sin que
+      // haya proveedor de plataforma: mirar solo el proveedor daba "los mails de
+      // entrega fallan" en una tienda cuyos mails salen perfectamente.
       const provider = mailProvider();
-      add(provider ? "ok" : "error", "mail_provider", provider ? `Emails sent with ${provider}` : "No mail provider configured: delivery emails fail.", "Set POSTMARK_TOKEN or BREVO_API_KEY in the deployment env.");
+      const { data: propio } = await db.from("store_mail")
+        .select("host").eq("store_id", s.id).maybeSingle();
+      add(provider || propio ? "ok" : "error", "mail_provider",
+          propio ? `Emails sent from the store's own mailbox (${propio.host})`
+                 : provider ? `Emails sent with ${provider}`
+                 : "No mail provider and no store mailbox: delivery emails fail.",
+          "set_store_smtp with the store's mailbox, or set POSTMARK_TOKEN / BREVO_API_KEY.");
       add(s.email_from ? "ok" : "warn", "email_from", s.email_from ? `Sender ${s.email_from}` : `No store sender: emails go out from ${senderOf(s as unknown as Store).email}.`, "update_store email_from with an address on a domain verified in the mail provider.");
       add(mailFails?.length ? "warn" : "ok", "email_failures_7d", mailFails?.length ? `${mailFails.length} failed emails in 7 days, latest: ${mailFails[0].error}` : "No failed emails in 7 days", "get_email_log status=failed for details.");
 
@@ -407,8 +438,11 @@ export function registerReadTools(server: McpServer) {
         }
       }
       if (!(funnels ?? []).some((f) => f.active)) add("warn", "checkouts", "No active checkout.", "create_checkout");
-      const noDelivery = products.filter((p) => p.active && p.kind !== "bonus" && !p.delivery_url && !(p.delivery_links ?? []).length);
-      add(noDelivery.length ? "warn" : "ok", "delivery_links", noDelivery.length ? `Active products without delivery link: ${noDelivery.map((p) => p.slug).join(", ")}` : "Every active main/upsell product has a delivery link", "upsert_product delivery_url=https://...");
+      // delivery_file cuenta: un PDF en el bucket privado es la forma MAS segura de
+        // entregar (link firmado de 10 min) y se leia como "sin entrega".
+        const noDelivery = products.filter((p) => p.active && p.kind !== "bonus"
+          && !p.delivery_url && !(p.delivery_links ?? []).length && !p.delivery_file);
+      add(noDelivery.length ? "warn" : "ok", "delivery_links", noDelivery.length ? `Active products with nothing to deliver: ${noDelivery.map((p) => p.slug).join(", ")}` : "Every active main/upsell product has something to deliver", "upsert_product delivery_url=https://... or upload a file.");
 
       // Pedidos
       add(undelivered?.length ? "error" : "ok", "undelivered_orders", undelivered?.length

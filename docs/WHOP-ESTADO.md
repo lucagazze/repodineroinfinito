@@ -197,3 +197,49 @@ amber/`, canal que Whop reconstruye cada pocos minutos).
 
 Mientras tanto el comprador **no** se queda mirando un recuadro gris: a los 12 s
 aparece un aviso con un boton de reintentar que vuelve a montar el elemento.
+
+---
+
+## 20/10/2026 — auditoria completa
+
+### Verificado contra lo real, no contra la base
+
+| Que | Como se comprobo | Resultado |
+|---|---|---|
+| Webhook de Whop | consulta a la API de Whop | apunta a produccion, activo, 12 eventos |
+| Seguridad del webhook | POST sin firma y con firma falsa a produccion | 400 las dos veces; tienda inexistente 404 |
+| Entrega | listado del bucket `entregas` | los 3 PDF existen (1.31, 0.66, 0.58 MB) |
+| Correo | `store_mail` + registro de fallos | casilla propia en Hostinger, 0 fallos en 7 dias |
+| Cobro | `POST /payments` con la llave | la cuenta acepta cobrar |
+
+### El diagnostico mentia en tres puntos
+
+`diagnose_store` daba **2 errores que no existian** y ocultaba los avisos reales.
+Un chequeo que grita en falso es peor que ninguno: entierra lo que si importa.
+
+1. **`stripe_account`** — revisaba Stripe en una tienda que cobra con Whop.
+   Ahora mira `stores.gateway` y, con Whop, verifica cuenta, secreto del webhook
+   y ultimo evento.
+2. **`mail_provider`** — solo miraba el proveedor de plataforma. Una tienda que
+   manda por su PROPIA casilla (`store_mail`) salia como "los mails de entrega
+   fallan" mandandolos perfectamente.
+3. **`delivery_links`** — ignoraba `delivery_file`. Un PDF en el bucket privado
+   es la forma MAS segura de entregar y se leia como "sin entrega".
+
+La causa de (1) fue la misma de siempre: **`STORE_FULL_COLS` es una lista
+explicita** y la columna nueva llegaba como `undefined` sin un solo error. Es la
+segunda vez que pasa (la primera fue `STORE_COLS` en `db.ts`). Las dos listas
+llevan ahora un comentario que lo advierte.
+
+Despues de las correcciones: **0 errores**, 5 avisos, todos reales.
+
+### Lo que falta, y de quien depende
+
+| Pendiente | De quien |
+|---|---|
+| El formulario de Whop no termina de cargar (ver arriba) | probar en otro navegador |
+| La landing todavia apunta a `#offerta`, no al checkout | **se cambia recien cuando el formulario este confirmado**: mandar visitantes a un checkout muerto es peor que no mandarlos |
+| Dominio propio del checkout (DNS) | Bruno |
+| Token de Conversions API del pixel | Bruno |
+| `business.phone` vacio | Bruno |
+| Post-pago | diferido: necesita un segundo libro |
