@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { applyRefund, fulfill } from "@/lib/fulfill";
 import { DEFAULT_LOCALE, pickLocale } from "@/lib/i18n";
-import { aNumero, montoCobrado, type PagoWhop } from "@/lib/whop";
+import { aNumero, conexionDe, montoCobrado, verPago, type PagoWhop } from "@/lib/whop";
 
 /**
  * Qué hacer con cada evento de Whop.
@@ -185,7 +185,30 @@ export async function manejarEventoWhop(ev: Evento, ctx: { storeId: string }) {
     const pagoId = (dato as { payment_id?: string; payment?: { id?: string } }).payment_id
       ?? (dato as { payment?: { id?: string } }).payment?.id;
     if (!pagoId) return { ignorado: "reembolso sin pago" };
-    const devuelto = Number((dato as { amount?: number }).amount ?? 0);
+
+    // El importe del evento, con aNumero: puede venir como objeto de dinero,
+    // igual que en el cobro. `Number({...})` daba NaN, y un NaN hacia que un
+    // reembolso TOTAL se registrara como parcial -- el pedido quedaba vendido.
+    let devuelto = aNumero((dato as { amount?: unknown }).amount as never);
+
+    // Y si no se puede leer, se le pregunta a Whop en vez de adivinar: el pago
+    // trae `refunded_amount`, que es el acumulado real de devoluciones.
+    if (devuelto === null) {
+      const conn = await conexionDe(ctx.storeId);
+      if (conn) {
+        try {
+          const p = await verPago(conn.apiKey, pagoId);
+          devuelto = aNumero(p.refunded_amount);
+        } catch (e) {
+          console.error("[whop] reembolso: no pude leer el pago", pagoId, (e as Error).message);
+        }
+      }
+    }
+    if (devuelto === null) {
+      // Se tira error a proposito: Whop reintenta. Registrar un reembolso con
+      // importe inventado es peor que no registrarlo todavia.
+      throw new Error(`reembolso de ${pagoId} sin importe legible`);
+    }
 
     // Para saber si se devolvió TODO hay que comparar contra lo cobrado: Whop
     // no manda una bandera equivalente al `refunded` de Stripe.
