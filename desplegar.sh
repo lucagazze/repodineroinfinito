@@ -42,12 +42,17 @@ URL=$($V project ls 2>&1 | awk '$1=="checkout"{print $2}' | head -1)
 comprueba() { curl -s -o /dev/null --max-time 15 -w "%{http_code}" "$1" 2>/dev/null; }
 if [ -n "$URL" ] && [ "$(comprueba "$URL")" = "000" ]; then
   echo "  OJO: $URL no responde todavia (DNS sin propagar?)."
-  ALT=$($V project ls 2>&1 | grep -oE 'https://[a-z0-9-]+\.vercel\.app' | head -1)
-  if [ -n "$ALT" ] && [ "$(comprueba "$ALT")" != "000" ]; then
-    echo "  uso la direccion de vercel.app que SI responde: $ALT"
+  # El respaldo es la ULTIMA direccion que funciono, que este script guarda en
+  # .vercel-url al terminar bien. NO vale buscar un *.vercel.app cualquiera en
+  # la lista de proyectos: la primera que aparece puede ser la de OTRO proyecto,
+  # y entonces la app queda apuntando al sitio equivocado (paso el 20/10/2026).
+  ALT=$(cat .vercel-url 2>/dev/null | tr -d ' \n')
+  if [ -n "$ALT" ] && [ "$ALT" != "$URL" ] && [ "$(comprueba "$ALT")" != "000" ]; then
+    echo "  uso la ultima direccion que funciono: $ALT"
     URL="$ALT"
   else
-    echo "  y no encontre ninguna alternativa que responda: no toco las variables."
+    echo "  y no hay una anterior que responda: no toco las variables."
+    echo "  (cuando el DNS propague, volve a correr este script)"
     exit 1
   fi
 fi
