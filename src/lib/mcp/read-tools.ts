@@ -464,8 +464,13 @@ export function registerReadTools(server: McpServer) {
       const legalMissing = (["legal_name", "legal_address", "statement_descriptor"] as const).filter((k) => !s[k]);
       add(legalMissing.length ? "warn" : "ok", "legal", legalMissing.length ? `Missing ${legalMissing.join(", ")} (env fallbacks used: ${JSON.stringify(legalOf(s as unknown as Store))})` : "Legal fields set", "update_store legal_name / legal_address / statement_descriptor.");
       const b = s.business ?? {};
-      const bizMissing = ["tagline", "about", "phone"].filter((k) => !b[k]);
-      add(bizMissing.length ? "warn" : "ok", "business_info", bizMissing.length ? `business.${bizMissing.join(", business.")} empty (shown on the public catalog Stripe reviews)` : "Business info set", "update_store business={...}");
+      // El telefono lo pide STRIPE para su revision del catalogo. Con Whop el
+      // comerciante de registro es Whop y esa revision la hace sobre su propia
+      // cuenta, asi que un telefono vacio no es un pendiente: es una decision
+      // valida de no publicar un numero personal.
+      const pideTelefono = pasarela === "stripe";
+      const bizMissing = ["tagline", "about", ...(pideTelefono ? ["phone"] : [])].filter((k) => !b[k]);
+      add(bizMissing.length ? "warn" : "ok", "business_info", bizMissing.length ? `business.${bizMissing.join(", business.")} empty (shown on the public catalog)` : "Business info set", "update_store business={...}");
 
       // Dominios
       add(s.domain ? "ok" : "warn", "checkout_domain", s.domain ? `Checkout domain ${s.domain}` : "No custom checkout domain: buyers see the app domain.", "update_store domain=checkout.brand.com, point its DNS to Vercel, then register_apple_pay_domains.");
