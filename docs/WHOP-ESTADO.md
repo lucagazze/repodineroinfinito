@@ -355,3 +355,21 @@ perfecta. Se perdio tiempo mirando ahi.
 **Medir la forma de la respuesta antes de escribir el codigo que la consume.**
 Un `console.log` del primer pago real hubiera ahorrado los cuatro. El tipo
 `PagoWhop` estaba escrito desde la documentacion, no desde un cuerpo real.
+
+---
+
+## Trampa del dominio propio (20/10/2026)
+
+Apenas se asigna un dominio propio al proyecto, **Vercel lo reporta como
+"Latest Production URL" aunque su DNS no resuelva**. `desplegar.sh` lo leia de
+ahi y lo cargaba como `PUBLIC_BASE_URL`: los mails de entrega habrian salido con
+enlaces muertos y los 16 crons apuntando a la nada.
+
+Ahora el script **comprueba que la direccion responda** antes de escribirla, cae
+a la de `vercel.app` si la propia todavia no resuelve, y si ninguna responde se
+niega a tocar las variables.
+
+Para activar el dominio: `python3 dominio.py` comprueba CNAME, resolucion,
+certificado y que SIRVA el producto; `--activar` solo lo carga en
+`stores.domain` si las cuatro pasan. Cargarlo antes hace que el middleware
+redirija a un sitio que no existe y el checkout muere para todos.

@@ -32,6 +32,25 @@ $V --prod --yes 2>&1 | tee /tmp/vercel.log | tail -2
 URL=$($V project ls 2>&1 | awk '$1=="checkout"{print $2}' | head -1)
 # Respaldo: la direccion de produccion tambien la imprime el propio deploy.
 [ -z "$URL" ] && URL=$(grep -oE 'Production URL: https://[^"]+' /tmp/vercel.log | tail -1 | sed 's/.*: //')
+
+# La direccion tiene que RESPONDER antes de cargarla como PUBLIC_BASE_URL.
+# Vercel empieza a reportar un dominio propio como "Latest Production URL"
+# apenas se lo asigna al proyecto, aunque su DNS todavia no resuelva -- y
+# entonces este script lo escribe como base de la app. Resultado: los mails de
+# entrega salen con enlaces muertos y los 16 crons apuntan a la nada.
+# Paso el 20/10/2026 con pay.financestudylab.com recien asignado.
+comprueba() { curl -s -o /dev/null --max-time 15 -w "%{http_code}" "$1" 2>/dev/null; }
+if [ -n "$URL" ] && [ "$(comprueba "$URL")" = "000" ]; then
+  echo "  OJO: $URL no responde todavia (DNS sin propagar?)."
+  ALT=$($V project ls 2>&1 | grep -oE 'https://[a-z0-9-]+\.vercel\.app' | head -1)
+  if [ -n "$ALT" ] && [ "$(comprueba "$ALT")" != "000" ]; then
+    echo "  uso la direccion de vercel.app que SI responde: $ALT"
+    URL="$ALT"
+  else
+    echo "  y no encontre ninguna alternativa que responda: no toco las variables."
+    exit 1
+  fi
+fi
 if [ -z "$URL" ]; then echo "  no pude leer la direccion:"; tail -20 /tmp/vercel.log; exit 1; fi
 echo "  direccion: $URL"
 
