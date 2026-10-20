@@ -171,6 +171,11 @@ export function cobrarConToken(apiKey: string, args: {
     });
 }
 
+/** Un pago por su id. Lo usa la pagina de gracias cuando llega antes del webhook. */
+export function verPago(apiKey: string, pagoId: string) {
+  return pedir<PagoWhop>(apiKey, `/payments/${encodeURIComponent(pagoId)}`);
+}
+
 /** Medios de pago guardados de un comprador. */
 export function mediosDe(apiKey: string, memberId: string) {
   return pedir<{ data: Array<{ id: string; type?: string }> }>(

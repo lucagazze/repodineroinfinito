@@ -63,6 +63,49 @@ async function resolver(storeId: string, pago: PagoWhop) {
   return { tienda: s, embudo: f2.slug as string, via: "products.whop_plan_id" as const };
 }
 
+/**
+ * Convierte un pago de Whop en un pedido entregado.
+ *
+ * Vive aparte porque la llaman DOS caminos: el webhook `payment.succeeded` y la
+ * página de gracias cuando el comprador llega antes que el webhook. Tiene que
+ * ser una sola función: si cada camino armara el pedido a su manera, un día
+ * entregarían cosas distintas por el mismo pago. `fulfill` es idempotente, así
+ * que no importa quién llegue primero.
+ */
+export async function entregarPagoWhop(
+  pago: PagoWhop,
+  quien: { tienda: string; embudo: string },
+  cobrado: boolean,
+) {
+  // El id del medio de pago guardado llega acá y en ningún otro lado: es lo
+  // que después permite cobrar el upsell de 1 clic sin pedir la tarjeta.
+  const guardar: Record<string, unknown> = {};
+  if (pago.member?.id) guardar.whop_member_id = pago.member.id;
+  if (pago.payment_method?.id) guardar.whop_payment_method_id = pago.payment_method.id;
+
+  await fulfill({
+    provider: "whop",
+    paymentId: PREFIJO + pago.id,
+    customerId: pago.user?.id ?? null,
+    email: pago.user?.email ?? null,
+    name: pago.user?.name ?? null,
+    phone: null,
+    country: null,
+    currency: pago.currency ?? "usd",
+    amountTotal: montoCobrado(pago),
+    metadata: { ...(pago.metadata ?? {}), store: quien.tienda, funnel: quien.embudo,
+                locale: (pago.metadata ?? {}).locale ?? DEFAULT_LOCALE },
+    paid: cobrado,
+  });
+
+  if (Object.keys(guardar).length) {
+    await db.from("orders").update(guardar).eq("stripe_payment_intent", PREFIJO + pago.id);
+  }
+}
+
+/** Resuelve a qué tienda/embudo corresponde un pago. Expuesto para la página de gracias. */
+export const resolverPagoWhop = resolver;
+
 export async function manejarEventoWhop(ev: Evento, ctx: { storeId: string }) {
   const tipo = ev.action ?? ev.type ?? "";
   const dato = (ev.data ?? {}) as PagoWhop & { payment?: PagoWhop; amount?: number; total?: boolean };
@@ -79,30 +122,7 @@ export async function manejarEventoWhop(ev: Evento, ctx: { storeId: string }) {
       throw new Error(`pago ${pago.id} sin embudo: ni metadata ni plan conocido (plan=${pago.plan?.id ?? "-"})`);
     }
 
-    // El id del medio de pago guardado llega acá y en ningún otro lado: es lo
-    // que después permite cobrar el upsell de 1 clic sin pedir la tarjeta.
-    const guardar: Record<string, unknown> = {};
-    if (pago.member?.id) guardar.whop_member_id = pago.member.id;
-    if (pago.payment_method?.id) guardar.whop_payment_method_id = pago.payment_method.id;
-
-    await fulfill({
-      provider: "whop",
-      paymentId: PREFIJO + pago.id,
-      customerId: pago.user?.id ?? null,
-      email: pago.user?.email ?? null,
-      name: pago.user?.name ?? null,
-      phone: null,
-      country: null,
-      currency: pago.currency ?? "usd",
-      amountTotal: montoCobrado(pago),
-      metadata: { ...(pago.metadata ?? {}), store: quien.tienda, funnel: quien.embudo,
-                  locale: (pago.metadata ?? {}).locale ?? DEFAULT_LOCALE },
-      paid: tipo === "payment.succeeded",
-    });
-
-    if (Object.keys(guardar).length) {
-      await db.from("orders").update(guardar).eq("stripe_payment_intent", PREFIJO + pago.id);
-    }
+    await entregarPagoWhop(pago, quien, tipo === "payment.succeeded");
     return { entregado: pago.id, via: quien.via };
   }
 

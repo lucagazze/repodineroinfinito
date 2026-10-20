@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -p 3100",
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
@@ -13,9 +13,10 @@
     "check:links": "node --experimental-strip-types scripts/check-public-url.mjs",
     "test:pujas": "node --experimental-strip-types --test scripts/test-pujas.mjs",
     "test:autopilot": "node --experimental-strip-types --test scripts/test-autopilot.mjs",
-    "test": "npm run check:links && npm run test:pujas && npm run test:autopilot && npm run test:whop",
+    "test": "npm run check:links && npm run test:pujas && npm run test:autopilot && npm run test:whop && npm run test:acento",
     "deploy:safe": "bash scripts/deploy-safe.sh",
-    "test:whop": "node --experimental-strip-types scripts/check-whop-firma.mjs"
+    "test:whop": "node --experimental-strip-types scripts/check-whop-firma.mjs",
+    "test:acento": "node --experimental-strip-types scripts/check-whop-acento.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "^2.3.1",

@@ -2,14 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Inter, DM_Sans } from "next/font/google";
-import { loadStripe } from "@stripe/stripe-js";
-import {
-  Elements,
-  ExpressCheckoutElement,
-  PaymentElement,
-  useElements,
-  useStripe,
-} from "@stripe/react-stripe-js";
+// "/pure": el modulo normal INYECTA js.stripe.com con solo importarlo, aunque
+// la tienda cobre con Whop y nunca se llame a loadStripe. Asi el script se baja
+// recien cuando hace falta.
+import { loadStripe } from "@stripe/stripe-js/pure";
+import { Elements } from "@stripe/react-stripe-js";
+import { useMotorStripe } from "./motor-stripe";
+import { useMotorWhop, ProveedorWhop } from "./motor-whop";
+import type { CtxMotor, UsarMotor } from "./motores";
 import { T, money, type Locale } from "@/lib/i18n";
 import { toMinor } from "@/lib/minor";
 import { CHECKOUT_CSS } from "./checkout.css";
@@ -32,6 +32,13 @@ type Offer = {
 export type Props = {
   store: string; funnel: string; locale: Locale; country: string | null;
   currency: string; publishableKey: string;
+  /**
+   * Con que cobra esta tienda. Es un dato de la tienda, no se adivina: una
+   * tienda con las dos pasarelas conectadas tiene que cobrar con la que eligio.
+   */
+  gateway: "stripe" | "whop";
+  /** biz_...: la cuenta de Whop, solo si gateway es "whop". */
+  whopAccountId: string | null;
   /** Configuración de medios de pago de Stripe de la tienda (la misma que la plataforma anterior). */
   pmc: string | null;
   /** Pixels de Meta de esta oferta. */
@@ -69,8 +76,8 @@ type Dict = (typeof T)[Locale];
 
 export default function CheckoutClient(p: Props) {
   const stripePromise = useMemo(
-    () => (p.publishableKey ? loadStripe(p.publishableKey) : null),
-    [p.publishableKey]
+    () => (p.gateway === "stripe" && p.publishableKey ? loadStripe(p.publishableKey) : null),
+    [p.gateway, p.publishableKey]
   );
   const [fatal, setFatal] = useState<string | null>(null);
   const checkoutRef = useRef<string | null>(null);
@@ -209,6 +216,22 @@ export default function CheckoutClient(p: Props) {
       <main className="ck-wrap">
         {fatal ? (
           <p className="ck-err">{fatal}</p>
+        ) : p.gateway === "whop" ? (
+          // Whop: los campos de la tarjeta los sirve Whop, el formulario es el mismo.
+          p.whopAccountId ? (
+            <ProveedorWhop p={p} total={total}>
+              <CheckoutForm
+                p={p} t={t} st={st} total={total} bumps={bumps} setBumps={setBumps}
+                createIntent={createIntent} getCheckout={() => checkoutRef.current} exitOn={exitOn}
+                recoveryToken={rec?.token ?? null} useMotor={useMotorWhop}
+              />
+            </ProveedorWhop>
+          ) : (
+            // La tienda dice Whop pero no hay cuenta conectada. No se cae a
+            // Stripe por su cuenta: cobrar por otra pasarela sin que nadie lo
+            // decida es peor que no cobrar.
+            <p className="ck-err">{t.ckPayNotDone}</p>
+          )
         ) : stripePromise ? (
           <Elements
             stripe={stripePromise}
@@ -247,6 +270,7 @@ export default function CheckoutClient(p: Props) {
             <CheckoutForm
               p={p} t={t} st={st} total={total} bumps={bumps} setBumps={setBumps}
               createIntent={createIntent} getCheckout={() => checkoutRef.current} exitOn={exitOn}
+              recoveryToken={rec?.token ?? null} useMotor={useMotorStripe}
             />
           </Elements>
         ) : (
@@ -309,14 +333,18 @@ function PolicySheet({ url, onClose }: { url: string; onClose: () => void }) {
 /* ================================================================ form */
 
 function CheckoutForm({
-  p, t, st, total, bumps, setBumps, createIntent, getCheckout, exitOn,
+  p, t, st, total, bumps, setBumps, createIntent, getCheckout, exitOn, recoveryToken, useMotor,
 }: {
   p: Props; t: Dict; st: CheckoutSettings; total: number; bumps: string[]; setBumps: (b: string[]) => void;
   createIntent: (who: { email?: string; name?: string; phone?: string }, opts?: { sca?: boolean }) => Promise<string>;
-  getCheckout: () => string | null; exitOn: boolean;
+  getCheckout: () => string | null; exitOn: boolean; recoveryToken: string | null;
+  /**
+   * El motor de cobro. Es un hook, y se invoca una sola vez y sin condiciones:
+   * la pasarela no cambia en el medio de una visita, asi que su identidad es
+   * estable y las reglas de los hooks se respetan.
+   */
+  useMotor: UsarMotor;
 }) {
-  const stripe = useStripe();
-  const elements = useElements();
   const syncing = false;
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -372,109 +400,35 @@ function CheckoutForm({
     logEvent("checkout", "lead", { email: e.slice(0, 120), checkout: getCheckout() });
   }
 
-  /** Ya se fue a gracias (por el resultado de Stripe o por el vigía): no se navega dos veces. */
+  /** Ya se fue a gracias (por el resultado del cobro o por el vigía): no se navega dos veces. */
   const leaving = useRef(false);
-  function toThanks(pi: { id: string; status: string }, clientSecret: string, via: string) {
+  /**
+   * Cobrado: registra el evento y manda a gracias. Vive acá, no en el motor,
+   * para que el evento «paid» salga idéntico con las dos pasarelas; lo que
+   * cambia es solo qué parámetros lleva la dirección, y eso lo arma el motor.
+   */
+  const aGracias: CtxMotor["aGracias"] = ({ id, status, via, qs }) => {
     if (leaving.current) return;
     leaving.current = true;
-    logEvent("checkout", "paid", { pi: pi.id, status: pi.status, total, currency: p.currency, ...(via !== "confirm" ? { via } : {}) });
-    const q = new URLSearchParams({
-      payment_intent: pi.id,
-      payment_intent_client_secret: clientSecret,
-      redirect_status: pi.status === "succeeded" ? "succeeded" : pi.status,
-    });
-    window.location.assign(`${returnUrl()}?${q}`);
-  }
+    logEvent("checkout", "paid", { pi: id, status, total, currency: p.currency, ...(via && via !== "confirm" ? { via } : {}) });
+    window.location.assign(`${returnUrl()}?${new URLSearchParams(qs)}`);
+  };
 
-  /**
-   * Vigía del pago mientras el botón dice «Procesando». Cada 4 s y al volver a la pestaña le pregunta a Stripe cómo quedó: cobrado → gracias;
-   * venció o lo rechazaron después de mandarlo a otra app → aviso y botón libre para pagar de otra forma.
-   */
-  function watchIntent(clientSecret: string) {
-    let stop = false;
-    let wentOut = false;
-    const check = async () => {
-      if (stop || leaving.current || !stripe) return;
-      const { paymentIntent: pi } = await stripe.retrievePaymentIntent(clientSecret).catch(() => ({ paymentIntent: null }));
-      if (!pi || stop) return;
-      if (pi.status === "succeeded" || pi.status === "processing") { stop = true; return toThanks(pi, clientSecret, "watch"); }
-      if (pi.status === "requires_action") wentOut = true;
-      if (wentOut && pi.status === "requires_payment_method" && pi.last_payment_error) {
-        stop = true;
-        logEvent("checkout", "pay_error", { stage: "watch", code: pi.last_payment_error.code ?? pi.last_payment_error.decline_code ?? null, type: pi.last_payment_error.payment_method?.type ?? null });
-        setMsg(t.ckPayNotDone);
-        setBusy(false);
-      }
-    };
-    const iv = window.setInterval(check, 4000);
-    const onVisible = () => { if (document.visibilityState === "visible") void check(); };
-    document.addEventListener("visibilitychange", onVisible);
-    return () => { stop = true; window.clearInterval(iv); document.removeEventListener("visibilitychange", onVisible); };
-  }
-
-  /** Valida el formulario, crea el pago en el servidor y lo confirma. true = ya se va a gracias. */
-  async function pay(who: { email?: string; name?: string; phone?: string }, method: "form" | "express", sca = false): Promise<boolean> {
-    if (!stripe || !elements) return false;
-    logEvent("checkout", "pay_attempt", { method, total, currency: p.currency, bumps: bumps.length, checkout: getCheckout() });
-    const { error: invalid } = await elements.submit();
-    if (invalid) {
-      logEvent("checkout", "pay_error", { stage: "form", code: invalid.code ?? invalid.type ?? null });
-      setMsg(invalid.message ?? null);
-      return false;
-    }
-    let clientSecret: string;
-    try {
-      clientSecret = await createIntent(who, { sca });
-    } catch (e) {
-      const m = e instanceof Error ? e.message : String(e);
-      logEvent("checkout", "pay_error", { stage: "intent", message: m.slice(0, 160) });
-      setMsg(m);
-      return false;
-    }
-    // if_required: con tarjeta y billeteras Stripe devuelve el resultado acá y
-    // la redirección a gracias la hacemos nosotros (igual a la de Stripe), así
-    // queda el evento «paid». Los métodos con redirección siguen redirigiendo solos.
-    const unwatch = watchIntent(clientSecret);
-    const { error, paymentIntent } = await stripe.confirmPayment({
-      elements,
-      clientSecret,
-      redirect: "if_required",
-      confirmParams: {
-        return_url: returnUrl(),
-        receipt_email: who.email || undefined,
-        payment_method_data: {
-          billing_details: {
-            email: who.email || undefined, name: who.name || undefined, phone: who.phone || undefined,
-            // El formulario no pide país ni código postal (como la plataforma anterior): va el
-            // país desde donde se conecta. Stripe exige mandar la dirección si no la pide.
-            address: { country: p.country || "US", postal_code: "", state: "", city: "", line1: "", line2: "" },
-          },
-        },
-      },
-    });
-    unwatch();
-    if (!error && paymentIntent) {
-      toThanks(paymentIntent, clientSecret, "confirm");
-      return true;
-    }
-    if (leaving.current) return true;
-    logEvent("checkout", "pay_error", { stage: "confirm", code: error?.code ?? null, decline: error?.decline_code ?? null, type: error?.type ?? null });
-    // El banco pide verificar: un reintento pidiendo 3D Secure (el comprador ve la verificación de su banco).
-    const authReq = error?.decline_code === "authentication_required" || error?.code === "authentication_required";
-    if (authReq && !sca) return pay(who, method, true);
-    setMsg(authReq ? t.ckAuthRequired : error?.message ?? t.ckPayNotDone);
-    return false;
-  }
+  // El motor: Stripe o Whop. Un solo punto de invocación, sin condiciones.
+  const motor = useMotor({
+    p, t, st, total, bumps, exitOn, setMsg, setBusy, getCheckout, createIntent,
+    recoveryToken, express, setExpress, aGracias, yendose: leaving,
+  });
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (p.preview) return setMsg("Vista previa: acá no se cobra nada.");
-    if (!stripe || !elements || busy) return;
+    if (!motor.listo || busy) return;
     setBusy(true);
     setMsg(null);
     track(p.pixels, "AddPaymentInfo");
     // Si salió bien el botón queda girando hasta que carga gracias (no se puede pagar dos veces).
-    if (!(await pay({ email, name: [first, last].filter(Boolean).join(" "), phone: phone.trim() }, "form"))) setBusy(false);
+    if (!(await motor.pagar({ email, name: [first, last].filter(Boolean).join(" "), phone: phone.trim() }, "form"))) setBusy(false);
   }
 
   return (
@@ -538,49 +492,11 @@ function CheckoutForm({
 
         <section className="o-method">
           <h2 className="ck-h">{d2 ? <span className="ck-num">2</span> : <IconCard />}{t.ckPayMethod}</h2>
-          {st.payment.express && <ExpressCheckoutElement
-            options={{
-              emailRequired: true,
-              buttonHeight: 48,
-              // Como la plataforma anterior: el botón principal (Google Pay / Apple Pay) y «Mostrar más».
-              layout: { maxColumns: 1, maxRows: 1, overflow: "auto" },
-              buttonType: { applePay: "buy", googlePay: "buy" },
-            }}
-            onReady={({ availablePaymentMethods }) => setExpress(!!availablePaymentMethods)}
-            // Sin la casilla de acceso inmediato (UE/Reino Unido) no se abre Apple/Google Pay.
-            onConfirm={async (ev) => {
-              if (p.preview) return setMsg("Vista previa: acá no se cobra nada.");
-              track(p.pixels, "AddPaymentInfo");
-              await pay({
-                email: ev.billingDetails?.email ?? undefined,
-                name: ev.billingDetails?.name ?? undefined,
-                phone: ev.billingDetails?.phone ?? undefined,
-              }, "express");
-            }}
-          />}
-          {st.payment.express && express && <div className="ck-or">{t.ckOrPayOther}</div>}
-          <div className="ck-paycard">
-            <PaymentElement
-              options={{
-                // Como la plataforma anterior: lista con círculos, la tarjeta abierta.
-                layout: { type: "accordion", radios: "always", spacedAccordionItems: false, defaultCollapsed: false },
-                // Nombre y email ya se piden arriba.
-                fields: { billingDetails: { name: "never", email: "never", address: "never" } },
-                // Apple Pay, Google Pay y Link van arriba como botones rápidos;
-                // si el checkout los apaga arriba, quedan como pestañas acá.
-                wallets: st.payment.express
-                  ? { applePay: "never", googlePay: "never", link: "never" }
-                  : { applePay: "auto", googlePay: "auto", link: "auto" },
-                // El aviso de "cobros futuros" es para cobrar sin el comprador
-                // presente; los upsells se cobran con él en pantalla.
-                terms: { card: "never" },
-              }}
-            />
-          </div>
+          {motor.elemento}
         </section>
 
         <div className="o-pay">
-          <button type="submit" className="ck-pay" disabled={busy || syncing || !stripe}>
+          <button type="submit" className="ck-pay" disabled={busy || syncing || !motor.listo}>
             {busy || syncing ? <span className="ck-spin" /> : null}
             {busy ? t.ckProcessing : st.payButton.text ? st.payButton.text.replace("{total}", fmt(total)) : t.ckPay(fmt(total))}
           </button>
@@ -857,9 +773,13 @@ const OPTIONAL: Partial<Record<string, string>> = { it: "facoltativo", en: "opti
  * pasos numerados, bumps con casilla abajo y resumen plegable al final.
  */
 const D2_CSS = `
+/* Los verdes de abajo son el DEFECTO. Nada mas en esta hoja puede escribir el
+   color a mano: tiene que usar var(--pay), porque el estilo en linea del
+   checkout lo pisa con el color de la tienda. Si se escribe el hexadecimal,
+   esa parte se queda verde mientras el resto toma el color de la marca. */
 .ck.d2 { --pay:#16a34a; --ok:#16a34a; background:#eef1f4; color:#1f2937;
   font-family:ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
-.d2 .ck-topbar { background:#16a34a; color:#fff; min-height:48px; padding:12px 16px; display:flex; align-items:center;
+.d2 .ck-topbar { background:var(--pay); color:#fff; min-height:48px; padding:12px 16px; display:flex; align-items:center;
   justify-content:center; gap:6px; font-size:14px; font-weight:600; box-shadow:0 1px 2px rgba(0,0,0,.04); }
 .d2 .ck-topbar .ck-logo { max-height:26px; margin-right:10px; }
 .d2 .ck-social { background:#2d2d2d; padding:8px 16px; font-size:12px; }
@@ -871,10 +791,10 @@ const D2_CSS = `
 .d2 .ck-prod { background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:14px 16px; display:flex; gap:12px; align-items:center; }
 .d2 .ck-prod img { width:48px; height:62px; object-fit:contain; flex-shrink:0; }
 .d2 .ck-prod p { margin:0; font-size:15.2px; font-weight:700; line-height:1.3; color:#1f2937; }
-.d2 .ck-prod b { display:block; margin-top:3px; color:#16a34a; font-size:18.4px; font-weight:700; }
+.d2 .ck-prod b { display:block; margin-top:3px; color:var(--pay); font-size:18.4px; font-weight:700; }
 .d2 .o-data, .d2 .o-method { background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:16px; }
 .d2 .ck-h { font-size:18.4px; font-weight:600; color:#1f2937; gap:8px; margin:0 0 14px; letter-spacing:0; }
-.d2 .ck-num { width:26px; height:26px; border-radius:9999px; background:#16a34a; color:#fff; font-size:13.6px; font-weight:800;
+.d2 .ck-num { width:26px; height:26px; border-radius:9999px; background:var(--pay); color:#fff; font-size:13.6px; font-weight:800;
   display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; }
 .d2 .ck-help { display:none; }
 .d2 .ck-label { margin-top:4px; }
@@ -886,20 +806,20 @@ const D2_CSS = `
 .d2 .ck-bumpList { gap:10px; }
 .d2 .ck-b2 { background:#fff; border:1px solid #e5e7eb; border-radius:10px; overflow:hidden;
   font-family:var(--font-dm), "DM Sans", -apple-system, sans-serif; transition:border-color .15s; }
-.d2 .ck-b2.on { border-color:#16a34a; }
+.d2 .ck-b2.on { border-color:var(--pay); }
 .d2 .ck-b2Body { padding:14px 14px 12px; }
 .d2 .ck-b2Name { margin:0 0 8px; font-size:16px; font-weight:700; line-height:1.5; color:#1f2937; }
 .d2 .ck-b2Row { display:flex; gap:10px; align-items:flex-start; }
 .d2 .ck-b2Img { width:64px; height:64px; object-fit:contain; flex-shrink:0; }
 .d2 .ck-b2Desc { font-size:16px; line-height:1.5; color:#6b7280; }
 .d2 .ck-b2Price { display:flex; align-items:center; gap:8px; margin-top:10px; }
-.d2 .ck-b2Price b { color:#16a34a; font-size:16px; font-weight:700; }
+.d2 .ck-b2Price b { color:var(--pay); font-size:16px; font-weight:700; }
 .d2 .ck-b2Price s { color:#9ca3af; font-size:12.8px; }
-.d2 .ck-b2Off { margin-left:auto; background:#16a34a; color:#fff; font-size:11.2px; font-weight:700; padding:2px 8px; border-radius:6px; }
+.d2 .ck-b2Off { margin-left:auto; background:var(--pay); color:#fff; font-size:11.2px; font-weight:700; padding:2px 8px; border-radius:6px; }
 .d2 .ck-b2Foot { display:flex; align-items:center; gap:10px; padding:10px 14px; background:#fafafa; border-top:1px solid #e5e7eb;
-  cursor:pointer; color:#16a34a; font-size:14.4px; font-weight:700; }
+  cursor:pointer; color:var(--pay); font-size:14.4px; font-weight:700; }
 .d2 .ck-b2.on .ck-b2Foot { background:#f0fdf4; }
-.d2 .ck-b2Foot input { width:18px; height:18px; accent-color:#16a34a; margin:0; cursor:pointer; }
+.d2 .ck-b2Foot input { width:18px; height:18px; accent-color:var(--pay); margin:0; cursor:pointer; }
 .d2 .ck-pay { border-radius:8px; height:56px; font-weight:800; text-transform:uppercase; letter-spacing:.02em;
   box-shadow:0 2px 6px rgba(22,163,74,.35); }
 .d2 .ck-guar { border-radius:10px; }
@@ -907,7 +827,7 @@ const D2_CSS = `
 .d2 .ck-seals span { display:inline-flex; align-items:center; gap:5px; }
 .d2 .ck-sum { border-radius:10px; }
 .d2 .ck-sumHead { cursor:pointer; padding:14px 16px; }
-.d2 .ck-sumHead span { color:#16a34a; font-weight:400; font-size:14px; }
+.d2 .ck-sumHead span { color:var(--pay); font-weight:400; font-size:14px; }
 .d2 .ck-sumHead strong { font-size:17.6px; font-weight:600; color:#1f2937; }
 .d2 .ck-sumHead svg { display:block; transition:transform .2s; }
 .d2 .ck-sum[data-open="false"] .ck-sumBody { display:none; }

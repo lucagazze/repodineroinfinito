@@ -13,6 +13,7 @@ import { purchasePixel } from "@/lib/purchase-pixel";
 import { ThankYouView } from "./ThankYouView";
 import { kindMap, thankYouItems, thankYouTitle, SUMMARY } from "./items";
 import { TEST_PREFIX } from "@/lib/test-purchase";
+import { PREFIJO as WHOP_PREFIX } from "@/lib/whop-events";
 
 export const dynamic = "force-dynamic";
 export const metadata = { robots: { index: false, follow: false } };
@@ -29,8 +30,9 @@ async function itemsReady(orderId: string) {
 
 /** La dirección de su checkout para volver a intentar (con el email cargado y el aviso). */
 async function checkoutBack(pi: string) {
+  // Con Whop el pago se guarda con prefijo; se buscan las dos formas de una vez.
   const { data: ck } = await db.from("checkouts").select("email,funnels(slug,checkout_host,checkout_path,stores(slug))")
-    .eq("stripe_payment_intent", pi).maybeSingle();
+    .in("stripe_payment_intent", [pi, `${WHOP_PREFIX}${pi}`]).maybeSingle();
   const f = ck?.funnels as unknown as { slug: string; checkout_host: string | null; checkout_path: string | null; stores: { slug: string } | null } | null;
   if (!f?.stores) return null;
   const q = new URLSearchParams({ pago: "no", ...(ck?.email ? { email: ck.email } : {}) });
@@ -43,13 +45,17 @@ type Thankyou = { title?: string; message?: string; showSummary?: boolean; showS
 export default async function Gracias({
   searchParams,
 }: {
-  searchParams: Promise<{ session_id?: string; payment_intent?: string; done?: string; redirect_status?: string }>;
+  searchParams: Promise<{
+    session_id?: string; payment_intent?: string; done?: string; redirect_status?: string;
+    /** Whop: el pago y a qué tienda, que es lo que permite el rescate. */
+    payment?: string; payment_id?: string; store?: string; status?: string; provider?: string;
+  }>;
 }) {
   const sp = await searchParams;
   const ref = refOf(sp);
   if (!ref) return <Shell><Card><h1>{T[DEFAULT_LOCALE].missingId}</h1></Card></Shell>;
 
-  const order = await findOrder(ref);
+  const order = await findOrder(ref, sp.store ?? null);
   // Siempre el idioma en que compró.
   const locale = ((order?.locale as Locale) ?? DEFAULT_LOCALE) as Locale;
   const t = T[locale] ?? T.en;
@@ -58,7 +64,13 @@ export default async function Gracias({
     // Klarna, Cash App, Amazon Pay…: si el pago no se completó (canceló o lo rechazaron), Stripe lo
     // devuelve acá. No es «no encontramos tu pedido»: vuelve a su checkout, en su idioma, con el aviso.
     // (Pasó el 06/10 con una compradora de Nails USA que canceló en Klarna y se fue.)
-    if (sp.redirect_status === "failed" && ref.startsWith("pi_")) {
+    // Klarna/Cash App con Stripe, o una verificación del banco abandonada con
+    // Whop: el comprador vuelve acá sin pedido. Whop lo devuelve pase lo que
+    // pase, así que también se mira SU `status`, no solo el de Stripe.
+    const falloWhop = sp.provider === "whop" || sp.payment || sp.payment_id
+      ? !["paid", "succeeded", "processing", "pending", "open"].includes(String(sp.status ?? ""))
+      : false;
+    if (sp.redirect_status === "failed" || falloWhop) {
       const back = await checkoutBack(ref);
       if (back) redirect(back);
     }

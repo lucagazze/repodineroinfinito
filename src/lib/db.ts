@@ -83,6 +83,8 @@ export type Store = {
   logo_url?: string | null;
   /** Configuración de medios de pago de Stripe (la de la plataforma anterior). */
   stripe_pmc?: string | null;
+  /** Pasarela con la que cobra: stripe | whop. El checkout monta una sola. */
+  gateway?: "stripe" | "whop";
   timezone?: string;
   email_from?: string | null;
   legal_name?: string | null;
@@ -95,7 +97,10 @@ export type Store = {
 /** Columnas de la tienda que necesitan el checkout, la entrega y los mails. */
 export const STORE_COLS =
   "id,slug,name,domain,support_email,default_locale,guarantee_days,meta_pixel_id,brand," +
-  "display_name,logo_url,timezone,email_from,legal_name,legal_address,statement_descriptor,thankyou,delivery_email,stripe_pmc";
+  "display_name,logo_url,timezone,email_from,legal_name,legal_address,statement_descriptor,thankyou,delivery_email,stripe_pmc," +
+  // Sin esta columna acá el checkout leería gateway como undefined y cobraría
+  // siempre con Stripe, sin un solo error: la lista de columnas es explícita.
+  "gateway";
 
 /** Nombre legal y descriptor: los de la tienda, o los del entorno como respaldo. */
 export function legalOf(s: Store) {

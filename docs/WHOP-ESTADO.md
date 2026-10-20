@@ -102,3 +102,62 @@ desde el embudo, no desde el pago. Solo harian falta si se vendieran sueltos.
    `setupFutureUsage: "off_session"` para guardar la tarjeta.
 6. Post-pago de 1 clic: `off_session: false` + `return_url`, y esperar el
    webhook porque el cobro es asincrono.
+
+## Trampa al verificar el build
+
+`npm run build` falla con `TypeError: Cannot read properties of null (reading '1')`
+si el dev server esta corriendo: los dos escriben en `.next` y se pisan. No es un
+error del codigo. Antes de creerle a un build fallido:
+
+```
+kill $(lsof -ti:3100); rm -rf .next; npm run build
+```
+
+Verificado el 2026-10-20: con el dev server, 1 de 2 builds falla; sin el, 2 de 2 pasan.
+
+---
+
+## 20/10/2026 — un solo formulario, dos pasarelas
+
+### Como quedo armado
+
+El checkout tiene **un** formulario y dos MOTORES de cobro intercambiables:
+
+| archivo | que hace |
+|---|---|
+| `motores.ts` | el contrato entre el formulario y la pasarela |
+| `motor-stripe.tsx` | Stripe — el codigo que ya cobraba, movido tal cual |
+| `motor-whop.tsx` | Whop — token, cobro en el servidor, 3D Secure |
+| `whop-acento.ts` | traduce el color de marca (hex) al acento de Whop (nombre) |
+
+El JSX del checkout no sabe cual esta montada: pide `motor.elemento`,
+`motor.listo` y `motor.pagar`. Se hizo asi y no con dos formularios porque dos
+copias del mismo checkout se separan en el primer cambio de precio o de texto
+legal, y la que se queda atras es la que esta cobrando.
+
+Quien cobra lo dice `stores.gateway` (migracion 002), **no** se deduce de que
+conexion existe: durante una migracion las dos conviven.
+
+### Trampas que costaron tiempo (no repetirlas)
+
+1. **`onReady` del PaymentElement no se dispara.** Medido: el elemento se
+   dibuja, el handle existe, y el evento nunca llega. La senal correcta es
+   `onLoadingChange` de `<Payments>`. Atar el boton de pagar al evento
+   equivocado deja el checkout muerto sin un solo error en pantalla.
+2. **`returnUrl` tiene que ser ABSOLUTA** ("https-only, http for localhost").
+3. **Importar `@stripe/stripe-js` BAJA js.stripe.com**, aunque nunca se llame a
+   `loadStripe`. Se usa `@stripe/stripe-js/pure`.
+4. **`STORE_COLS` es una lista explicita de columnas.** Una columna nueva que no
+   se agregue ahi se lee como `undefined` sin ningun error.
+5. **El dev server rompe `npm run build`** (ver mas arriba).
+
+### Pendiente de verificar
+
+El formulario de Whop **no termina de cargar en `http://localhost` dentro del
+navegador embebido**: los iframes de `cdn.whop.com` navegan bien, la API
+responde con la cuenta correcta y los tres medios de pago habilitados, pero
+`onLoadingChange(false)` no llega nunca y el elemento se queda en su esqueleto.
+
+Pasa igual en `/whop-prueba` (banco de pruebas minimo, 404 en produccion), asi
+que **no es el checkout**: es el entorno o el propio SDK. Falta probarlo sobre
+HTTPS real. Hasta entonces el boton de pagar queda apagado a proposito.

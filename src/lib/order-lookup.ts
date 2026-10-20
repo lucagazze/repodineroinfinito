@@ -2,16 +2,31 @@ import { db } from "./db";
 import { stripeForStore, storeIdForPaymentIntent } from "./stripe";
 import { fulfill } from "./fulfill";
 import { fromMinor } from "./fx";
+import { conexionDe, verPago } from "./whop";
+import { PREFIJO as WHOP, entregarPagoWhop, resolverPagoWhop } from "./whop-events";
+import { TEST_PREFIX } from "./test-purchase";
 
 /**
  * Busca el pedido venga de donde venga.
  *
  * El checkout propio vuelve con ?payment_intent=pi_... y el hosted con
- * ?session_id=cs_.... Los dos tienen que llegar a la misma pantalla.
+ * ?session_id=cs_.... Con Whop vuelve con ?payment=... Los tres tienen que
+ * llegar a la misma pantalla.
+ *
+ * `tienda` solo hace falta para el rescate de Whop: la dirección de vuelta que
+ * le damos a Whop la lleva siempre.
  */
-export async function findOrder(ref: string | undefined) {
+export async function findOrder(ref: string | undefined, tienda?: string | null) {
   if (!ref) return null;
   const found = await lookup(ref);
+
+  // Whop devuelve al comprador antes de que llegue su webhook, igual que
+  // Stripe. Si el pedido no está o está pendiente, se le pregunta a Whop y se
+  // entrega por el mismo camino que usa el webhook (fulfill es idempotente).
+  if (esWhop(ref)) {
+    if (found && found.status !== "pending") return found;
+    return (await rescatarWhop(ref, tienda)) ?? found;
+  }
   // Un pedido «pending» (el pago estaba procesando) se vuelve a mirar en
   // Stripe: apenas se cobra pasa a pagado, sin esperar al webhook.
   if ((found && found.status !== "pending") || !ref.startsWith("pi_")) return found;
@@ -48,12 +63,47 @@ export async function findOrder(ref: string | undefined) {
   return lookup(ref);
 }
 
+/**
+ * Un pago de Whop, por descarte. No se mira el prefijo de Whop a propósito: si
+ * algún día cambia, mirar los nuestros -- que sí controlamos -- sigue andando.
+ */
+const esWhop = (ref: string) =>
+  !ref.startsWith("pi_") && !ref.startsWith("cs_") && !ref.startsWith(TEST_PREFIX);
+
+/**
+ * Le pregunta a Whop cómo quedó el pago y lo entrega. Devuelve el pedido ya
+ * guardado, o null si todavía no está cobrado.
+ */
+async function rescatarWhop(ref: string, tiendaSlug?: string | null) {
+  if (!tiendaSlug) return null;
+  const { data: st } = await db.from("stores").select("id").eq("slug", tiendaSlug).maybeSingle();
+  if (!st) return null;
+  const conn = await conexionDe(st.id);
+  if (!conn) return null;
+  try {
+    const pago = await verPago(conn.apiKey, ref);
+    const cobrado = pago.status === "paid" || pago.status === "succeeded";
+    // Un pago que no se cobró no genera pedido: la pantalla muestra «en proceso».
+    if (!cobrado && pago.status !== "processing" && pago.status !== "pending") return null;
+    if (pago.metadata?.source !== "checkout-propio") return null;
+    const quien = await resolverPagoWhop(st.id, pago);
+    if (!quien) return null;
+    await entregarPagoWhop(pago, quien, cobrado);
+  } catch (e) {
+    console.error("[gracias] rescate whop:", (e as Error).message);
+    return null;
+  }
+  return lookup(ref);
+}
+
 async function lookup(ref: string) {
-  const col = ref.startsWith("pi_") ? "stripe_payment_intent" : "stripe_session_id";
+  // Los pedidos de Whop se guardan con el prefijo whop: en la misma columna.
+  const col = ref.startsWith("cs_") ? "stripe_session_id" : "stripe_payment_intent";
+  const valor = esWhop(ref) ? WHOP + ref : ref;
   const { data, error } = await db
     .from("orders")
     .select("id,store_id,funnel_id,pp_funnel_id,status,locale,currency,email,name")
-    .eq(col, ref)
+    .eq(col, valor)
     .maybeSingle();
   // Base caída ≠ «no existe»: con error, la página muestra «tu pago está
   // confirmado, reintentá» (error.tsx) en vez de «no encontramos tu pedido».
@@ -61,7 +111,16 @@ async function lookup(ref: string) {
   return data;
 }
 
-/** El identificador que llevamos de una pantalla a la otra. */
-export function refOf(sp: { session_id?: string; payment_intent?: string }) {
-  return sp.payment_intent ?? sp.session_id;
+/**
+ * El identificador que llevamos de una pantalla a la otra.
+ *
+ * Con Whop se aceptan varios nombres: el que ponemos nosotros al navegar
+ * (`payment`) y los que puede agregar Whop al devolver al comprador después de
+ * una verificación del banco. Es barato aceptar los tres y caro equivocarse:
+ * el que no reconoce el id ve «no encontramos tu pedido» después de pagar.
+ */
+export function refOf(sp: {
+  session_id?: string; payment_intent?: string; payment?: string; payment_id?: string;
+}) {
+  return sp.payment_intent ?? sp.session_id ?? sp.payment ?? sp.payment_id;
 }

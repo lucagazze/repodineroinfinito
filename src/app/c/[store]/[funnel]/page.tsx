@@ -88,7 +88,10 @@ export default async function CheckoutPage({
 
   const [conn, { count: buyersNow }] = await Promise.all([
     // La llave pública viene con los datos cacheados del checkout: sin otra consulta (y anda aunque la base falle).
-    data.publishableKey ? Promise.resolve({ publishableKey: data.publishableKey }) : stripeForStore(s.id),
+    // Con Whop no se consulta Stripe: una consulta menos y una llave menos al navegador.
+    s.gateway === "whop"
+      ? Promise.resolve({ publishableKey: "" })
+      : data.publishableKey ? Promise.resolve({ publishableKey: data.publishableKey }) : stripeForStore(s.id),
     // Barra de compradores con el número real: checkouts de esta oferta
     // abiertos en los últimos 30 minutos.
     settings.buyersBar.show
@@ -100,12 +103,24 @@ export default async function CheckoutPage({
   const brand = (s.brand ?? {}) as { payButton?: string; guaranteeImage?: string };
   const legal = legalOf(s);
 
+  // Con qué cobra esta tienda. Es un dato de la tienda y no se deduce de qué
+  // conexión existe: durante una migración las dos conviven y adivinar por
+  // presencia haría cobrar a la que se conectó último.
+  const gateway: "stripe" | "whop" = s.gateway === "whop" ? "whop" : "stripe";
+
   return (
     <>
-      {/* Stripe.js se baja mientras el navegador arma la página. */}
-      <link rel="preconnect" href="https://js.stripe.com" />
-      <link rel="preconnect" href="https://api.stripe.com" />
-      <link rel="preconnect" href="https://m.stripe.network" />
+      {/* Se precalienta solo la pasarela que esta tienda va a montar. */}
+      {gateway === "whop" ? (
+        <link rel="preconnect" href="https://js.whop.com" />
+      ) : (
+        <>
+          {/* Stripe.js se baja mientras el navegador arma la página. */}
+          <link rel="preconnect" href="https://js.stripe.com" />
+          <link rel="preconnect" href="https://api.stripe.com" />
+          <link rel="preconnect" href="https://m.stripe.network" />
+        </>
+      )}
       <CheckoutClient
         store={store}
         funnel={funnel}
@@ -123,6 +138,8 @@ export default async function CheckoutPage({
         country={country}
         currency={currency}
         publishableKey={conn.publishableKey}
+        gateway={gateway}
+        whopAccountId={data.whopAccountId ?? null}
         pmc={s.stripe_pmc ?? null}
         pixels={preview ? [] : data.pixelIds}
         storeName={brandFor(s, locale)}
