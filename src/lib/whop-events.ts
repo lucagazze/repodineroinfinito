@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { applyRefund, fulfill } from "@/lib/fulfill";
-import { DEFAULT_LOCALE } from "@/lib/i18n";
+import { DEFAULT_LOCALE, pickLocale } from "@/lib/i18n";
 import { aNumero, montoCobrado, type PagoWhop } from "@/lib/whop";
 
 /**
@@ -104,17 +104,36 @@ export async function entregarPagoWhop(
     email: correo,
     name: pago.user?.name ?? null,
     phone: null,
-    country: null,
+    country: pago.billing_address?.country ?? null,
     currency: pago.currency ?? "usd",
     amountTotal: montoCobrado(pago),
     metadata: { ...(pago.metadata ?? {}), store: quien.tienda, funnel: quien.embudo,
-                locale: (pago.metadata ?? {}).locale ?? DEFAULT_LOCALE },
+                locale: idiomaDe(pago) },
     paid: cobrado,
   });
 
   if (Object.keys(guardar).length) {
     await db.from("orders").update(guardar).eq("stripe_payment_intent", PREFIJO + pago.id);
   }
+}
+
+/**
+ * En que idioma se le escribe al comprador.
+ *
+ * Primero el pais de la TARJETA (`billing_address.country`): es el dato mas
+ * fiable de donde esta esa persona. La IP que se capturo al abrir el checkout
+ * queda de respaldo -- sirve, pero una VPN o un viaje la corren de lugar.
+ *
+ * El pais manda sobre el idioma del navegador a proposito: alguien con el
+ * telefono en ingles comprando desde Mexico prefiere leer en espanol.
+ */
+function idiomaDe(pago: PagoWhop) {
+  const pais = pago.billing_address?.country;
+  if (pais) {
+    const porPais = pickLocale({ country: pais });
+    if (porPais) return porPais;
+  }
+  return (pago.metadata ?? {}).locale ?? DEFAULT_LOCALE;
 }
 
 /**

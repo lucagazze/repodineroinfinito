@@ -205,6 +205,9 @@ export type PagoWhop = {
   user?: { id?: string; email?: string | null; name?: string | null; username?: string | null } | null;
   /** El correo del comprador, en la RAIZ del pago. Medido el 20/10/2026. */
   customer_email?: string | null;
+  /** Direccion de facturacion. Su `country` es el pais de la TARJETA: mas
+   *  fiable que la IP para decidir en que idioma se le escribe. */
+  billing_address?: { country?: string | null; name?: string | null } | null;
   /** mber_... y payt_..., tambien en la RAIZ. Las formas anidadas se aceptan
    *  por si cambian, pero las que llegan hoy son estas dos. */
   member_id?: string | null;
