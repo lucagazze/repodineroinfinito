@@ -26,7 +26,12 @@ $V --prod --yes 2>&1 | tee /tmp/vercel.log | tail -2
 # La direccion NO se lee de la salida del deploy: el primer despliegue falla
 # (sin variables) y su URL efimera es la que imprime. La estable es la que
 # "project ls" llama "Latest Production URL".
-URL=$($V project ls 2>/dev/null | awk '$1=="checkout"{print $2}' | head -1)
+# 2>&1 y no 2>/dev/null: el CLI de Vercel imprime la TABLA por stderr. Con
+# stderr descartado la direccion sale vacia y el despliegue se corta justo
+# antes de cargar las variables (paso el 20/10/2026, dos veces).
+URL=$($V project ls 2>&1 | awk '$1=="checkout"{print $2}' | head -1)
+# Respaldo: la direccion de produccion tambien la imprime el propio deploy.
+[ -z "$URL" ] && URL=$(grep -oE 'Production URL: https://[^"]+' /tmp/vercel.log | tail -1 | sed 's/.*: //')
 if [ -z "$URL" ]; then echo "  no pude leer la direccion:"; tail -20 /tmp/vercel.log; exit 1; fi
 echo "  direccion: $URL"
 

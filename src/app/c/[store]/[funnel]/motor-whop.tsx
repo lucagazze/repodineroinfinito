@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState } from "react";
+import React, { createContext, useContext, useEffect, useRef, useState } from "react";
 import { loadWhop } from "@whop/elements";
 import { WhopElements, Payments, PaymentElement, usePayments } from "@whop/elements-react";
 import { toMinor } from "@/lib/minor";
@@ -45,14 +45,15 @@ export const idiomaWhop = (l: string): Idioma => (IDIOMAS.includes(l) ? (l as Id
  * Como el aviso llega al proveedor y quien lo necesita es el motor (que vive
  * mas abajo), viaja por contexto.
  */
-const Cargando = createContext(true);
+const Cargando = createContext<{ cargando: boolean; tardo: boolean; reintentar: () => void }>(
+  { cargando: true, tardo: false, reintentar: () => {} });
 
 // -------------------------------------------------------------- el motor
 
 export function useMotorWhop(c: CtxMotor): Motor {
   const { p, t, total, bumps, exitOn, setMsg, setBusy, getCheckout, recoveryToken, aGracias, yendose } = c;
   const payments = usePayments();
-  const cargando = useContext(Cargando);
+  const { cargando, tardo, reintentar } = useContext(Cargando);
   const [fallo, setFallo] = useState<string | null>(null);
 
   async function pagar(who: Comprador, method: "form" | "express"): Promise<boolean> {
@@ -159,10 +160,24 @@ export function useMotorWhop(c: CtxMotor): Motor {
     elemento: (
       <>
         {fallo && <p className="ck-err" role="alert">{fallo}</p>}
-      <div className="ck-paycard">
-        {/* El elemento trae su propio aviso de carga; no se tapa con otro. */}
-        <PaymentElement onError={(e) => setFallo(e.message || t.ckPayNotDone)} />
-      </div>
+        {/*
+          Si la pasarela no termina de cargar, el comprador NO se queda mirando
+          un recuadro gris para siempre: se le dice que pasa y se le da un boton.
+          Un checkout mudo pierde la venta sin dejar rastro de por que.
+        */}
+        {tardo && !fallo && (
+          <p className="ck-err" role="alert" style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+            <span>{t.ckPayFormStuck}</span>
+            <button type="button" onClick={reintentar}
+              style={{ border: 0, borderRadius: 6, padding: "6px 12px", background: "var(--pay)", color: "#fff", fontWeight: 700, cursor: "pointer" }}>
+              {t.ckRetry}
+            </button>
+          </p>
+        )}
+        <div className="ck-paycard">
+          {/* El elemento trae su propio aviso de carga; no se tapa con otro. */}
+          <PaymentElement onError={(e) => setFallo(e.message || t.ckPayNotDone)} />
+        </div>
       </>
     ),
   };
@@ -185,6 +200,20 @@ export function ProveedorWhop({
    * valor real se arma en el navegador.
    */
   const [cargando, setCargando] = useState(true);
+  const [tardo, setTardo] = useState(false);
+  // Cambiarla fuerza a React a tirar el arbol de Whop y montarlo de cero.
+  const [intento, setIntento] = useState(0);
+  const temporizador = useRef<number | null>(null);
+
+  // 12 s: con una conexion normal el elemento carga en menos de 2. Pasado ese
+  // margen ya no es lentitud, es que algo no va a llegar.
+  useEffect(() => {
+    if (!cargando) { setTardo(false); return; }
+    temporizador.current = window.setTimeout(() => setTardo(true), 12_000);
+    return () => { if (temporizador.current) window.clearTimeout(temporizador.current); };
+  }, [cargando, intento]);
+
+  const reintentar = () => { setTardo(false); setCargando(true); setIntento((n) => n + 1); };
 
   const volver = typeof window === "undefined" ? "" :
     `${window.location.origin}/gracias?store=${encodeURIComponent(p.store)}&funnel=${encodeURIComponent(p.funnel)}`;
@@ -196,6 +225,7 @@ export function ProveedorWhop({
       locale={idiomaWhop(p.locale)}
     >
       <Payments
+        key={intento}
         accountId={p.whopAccountId!}
         currency={p.currency.toLowerCase()}
         amount={Math.max(1, toMinor(total, p.currency))}
@@ -206,7 +236,7 @@ export function ProveedorWhop({
         setupFutureUsage="off_session"
         onLoadingChange={setCargando}
       >
-        <Cargando.Provider value={cargando}>{children}</Cargando.Provider>
+        <Cargando.Provider value={{ cargando, tardo, reintentar }}>{children}</Cargando.Provider>
       </Payments>
     </WhopElements>
   );

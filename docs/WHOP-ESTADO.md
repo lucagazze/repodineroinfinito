@@ -161,3 +161,39 @@ responde con la cuenta correcta y los tres medios de pago habilitados, pero
 Pasa igual en `/whop-prueba` (banco de pruebas minimo, 404 en produccion), asi
 que **no es el checkout**: es el entorno o el propio SDK. Falta probarlo sobre
 HTTPS real. Hasta entonces el boton de pagar queda apagado a proposito.
+
+---
+
+## 20/10/2026 (tarde) — en produccion
+
+`https://checkout-eta-six.vercel.app/c/financestudylab/kit`
+
+Dos cosas que bloqueaban y ya estan arregladas:
+
+1. **El embudo redirigia al checkout alojado de Whop.** `funnels.checkout_host`
+   / `checkout_path` apuntaban a `whop.com/checkout/ch_...` -- resto de la etapa
+   anterior. En produccion el middleware lo respetaba, asi que `/c/.../kit`
+   nunca llegaba a mostrar el checkout propio (ni los bonos). Campos vaciados.
+2. **`desplegar.sh` no leia la direccion** y se cortaba antes de cargar las
+   variables: el CLI de Vercel imprime la tabla por **stderr** y el script
+   descartaba stderr. Corregido, con un respaldo que la saca del log del deploy.
+
+### El formulario de Whop sigue sin cargar — y NO es http
+
+Probado sobre HTTPS real, mismo resultado que en localhost:
+
+- los 5 iframes de `cdn.whop.com` navegan bien
+- Apple Pay y Google Pay funcionan (Whop crea la sesion de Google Pay, HTTP 201)
+- la cuenta puede cobrar: `POST /payments` con la llave contesta
+  "member_id is required unless confirmation_token is provided", o sea que
+  acepta la cuenta y el plan en linea
+- pero `onLoadingChange(false)` no llega nunca y la lista de tarjetas tampoco
+- la consola repite: `postMessage ... target origin ('https://cdn.whop.com')
+  does not match the recipient window's origin`
+
+Pasa igual en el banco minimo `/whop-prueba`, asi que **no es el checkout**.
+Queda: el navegador embebido, o un error del propio SDK (`cdn.whop.com/elements/
+amber/`, canal que Whop reconstruye cada pocos minutos).
+
+Mientras tanto el comprador **no** se queda mirando un recuadro gris: a los 12 s
+aparece un aviso con un boton de reintentar que vuelve a montar el elemento.

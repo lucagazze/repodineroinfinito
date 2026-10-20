@@ -134,6 +134,9 @@ type Dict = {
   ckAuthRequired: string;
   /** Al volver de Klarna, Cash App, Amazon Pay… sin completar el pago. */
   ckPayNotDone: string;
+  /** El formulario de la pasarela no termino de cargar (no es un pago fallido). */
+  ckPayFormStuck: string;
+  ckRetry: string;
   ckAddToOrder: string;
   ckAdded: string;
   ckBumpsTitle: string;
@@ -220,6 +223,8 @@ export const T: Record<Locale, Dict> = {
     ckProcessing: "Elaborazione…",
     ckAuthRequired: "La tua banca chiede di confermare il pagamento. Tocca di nuovo «Paga» e approva la verifica nell’app della banca, oppure usa un’altra carta.",
     ckPayNotDone: "Il pagamento non è stato completato. Riprova o scegli un altro metodo di pagamento.",
+    ckPayFormStuck: "Non siamo riusciti a caricare il modulo di pagamento. Controlla la connessione e riprova.",
+    ckRetry: "Riprova",
     ckAddToOrder: "+ Aggiungi al mio ordine",
     ckAdded: "✓ Aggiunto",
     ckBumpsTitle: "AGGIUNGI AL TUO ORDINE",
@@ -304,6 +309,8 @@ export const T: Record<Locale, Dict> = {
     ckProcessing: "Processing…",
     ckAuthRequired: "Your bank needs you to confirm this payment. Tap Pay again and approve the check in your banking app, or use another card.",
     ckPayNotDone: "Your payment wasn't completed. Please try again or choose another payment method.",
+    ckPayFormStuck: "We couldn't load the payment form. Check your connection and try again.",
+    ckRetry: "Try again",
     ckAddToOrder: "+ Add to my order",
     ckAdded: "✓ Added",
     ckBumpsTitle: "ADD TO YOUR ORDER",
@@ -388,6 +395,8 @@ export const T: Record<Locale, Dict> = {
     ckProcessing: "Procesando…",
     ckAuthRequired: "Tu banco pide que confirmes el pago. Pulsa de nuevo «Pagar» y aprueba la verificación en la app de tu banco, o usa otra tarjeta.",
     ckPayNotDone: "El pago no se completó. Inténtalo de nuevo o elige otro método de pago.",
+    ckPayFormStuck: "No pudimos cargar el formulario de pago. Revisá la conexión y probá de nuevo.",
+    ckRetry: "Reintentar",
     ckAddToOrder: "+ Añadir a mi pedido",
     ckAdded: "✓ Añadido",
     ckBumpsTitle: "AÑADE A TU PEDIDO",
@@ -472,6 +481,8 @@ export const T: Record<Locale, Dict> = {
     ckProcessing: "Processando…",
     ckAuthRequired: "Seu banco pede para confirmar o pagamento. Toque de novo em Pagar e aprove a verificação no app do banco, ou use outro cartão.",
     ckPayNotDone: "O pagamento não foi concluído. Tente novamente ou escolha outra forma de pagamento.",
+    ckPayFormStuck: "Não conseguimos carregar o formulário de pagamento. Verifique a conexão e tente de novo.",
+    ckRetry: "Tentar de novo",
     ckAddToOrder: "+ Adicionar ao pedido",
     ckAdded: "✓ Adicionado",
     ckBumpsTitle: "ADICIONE AO SEU PEDIDO",
@@ -553,6 +564,8 @@ export const T: Record<Locale, Dict> = {
     ckProcessing: "Traitement…",
     ckAuthRequired: "Votre banque demande de confirmer le paiement. Touchez à nouveau « Payer » et validez la vérification dans l’application de votre banque, ou utilisez une autre carte.",
     ckPayNotDone: "Le paiement n'a pas abouti. Réessayez ou choisissez un autre moyen de paiement.",
+    ckPayFormStuck: "Nous n'avons pas pu charger le formulaire de paiement. Vérifiez votre connexion et réessayez.",
+    ckRetry: "Réessayer",
     ckAddToOrder: "+ Ajouter à ma commande",
     ckAdded: "✓ Ajouté",
     ckBumpsTitle: "AJOUTE À TA COMMANDE",
@@ -634,6 +647,8 @@ export const T: Record<Locale, Dict> = {
     ckProcessing: "Wird verarbeitet…",
     ckAuthRequired: "Deine Bank möchte, dass du die Zahlung bestätigst. Tippe noch einmal auf „Bezahlen“ und bestätige die Prüfung in deiner Banking-App, oder nimm eine andere Karte.",
     ckPayNotDone: "Die Zahlung wurde nicht abgeschlossen. Versuch es noch einmal oder wähle eine andere Zahlungsart.",
+    ckPayFormStuck: "Das Zahlungsformular konnte nicht geladen werden. Prüf deine Verbindung und versuch es erneut.",
+    ckRetry: "Erneut versuchen",
     ckAddToOrder: "+ Zur Bestellung hinzufügen",
     ckAdded: "✓ Hinzugefügt",
     ckBumpsTitle: "ZU DEINER BESTELLUNG HINZUFÜGEN",
