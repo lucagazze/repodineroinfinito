@@ -53,6 +53,42 @@ export async function readCatalogStatus(): Promise<CatalogStatus | null> {
   return (data?.value as CatalogStatus | null) ?? null;
 }
 
+/**
+ * Lo mismo que stripeTasks, para una tienda que cobra con Whop.
+ *
+ * Mucho mas corto a proposito: Whop es el comerciante de registro, asi que la
+ * razon social, la direccion y el descriptor que revisa Stripe no corren aca --
+ * los pone Whop. Lo que si tiene que estar es la conexion y, sobre todo, el
+ * secreto de firma del webhook: sin el, cada pago cobrado se rechaza y NADA se
+ * entrega, que es exactamente lo que paso el 20/10/2026.
+ */
+async function whopTasks(storeId: string): Promise<{ tasks: StripeTask[]; info: string[]; account: string | null }> {
+  const tasks: StripeTask[] = [];
+  const info: string[] = [];
+  const { data: w } = await db.from("store_whop")
+    .select("company_id,webhook_id,webhook_secret_enc,livemode,last_event_at")
+    .eq("store_id", storeId).maybeSingle();
+  if (!w) {
+    return { tasks: [{ label: "La tienda cobra con Whop pero no tiene Whop conectado",
+                       detail: "El checkout no puede cobrar. Conectala con la llave de la cuenta.",
+                       severity: "error" }], info, account: null };
+  }
+  if (!w.webhook_secret_enc) {
+    tasks.push({ label: "El webhook de Whop no tiene secreto de firma",
+                 detail: "Cada pago cobrado se rechaza y no se entrega nada. Hay que rehacer el webhook guardando su ws_.",
+                 severity: "error" });
+  }
+  if (!w.livemode) {
+    tasks.push({ label: "La cuenta de Whop esta en modo prueba",
+                 detail: "Las tarjetas reales no se cobran.", severity: "error" });
+  }
+  if (!w.last_event_at) {
+    info.push("Todavia no llego ningun evento de Whop: hace una compra de prueba para confirmar la entrega.");
+  }
+  info.push("Whop es el comerciante de registro: la razon social y el descriptor en el resumen de la tarjeta los pone Whop, no esta tienda.");
+  return { tasks, info, account: w.company_id as string };
+}
+
 async function stripeTasks(storeId: string, slug: string, audit: CatalogAudit): Promise<{ tasks: StripeTask[]; info: string[]; account: string | null }> {
   const tasks: StripeTask[] = [];
   const info: string[] = [];
@@ -107,7 +143,7 @@ export async function runCatalogStatus(): Promise<CatalogStatus | null> {
   await db.from("app_settings").upsert({ key: LOCK, value: { at: Date.now() }, updated_at: new Date().toISOString() }, { onConflict: "key" });
   try {
     const prev = await readCatalogStatus();
-    const { data: stores } = await db.from("stores").select("id,slug,name,display_name,is_test").eq("active", true).order("name");
+    const { data: stores } = await db.from("stores").select("id,slug,name,display_name,is_test,gateway").eq("active", true).order("name");
     const list = (stores ?? []).filter((s) => !s.is_test && !(process.env.EXCLUDED_STORES ?? "").split(",").map((x) => x.trim()).includes(s.slug as string));
     const out: StoreStatus[] = [];
     for (const st of list) {
@@ -121,7 +157,11 @@ export async function runCatalogStatus(): Promise<CatalogStatus | null> {
         ...a.facts.unknown.map((c) => `Categoría «${c}» sin texto para el catálogo`),
         ...(a.missingLive.length ? [`${a.missingLive.length} productos no aparecen en la página publicada`] : []),
       ];
-      const s = await stripeTasks(st.id as string, st.slug as string, a);
+      // Con Whop no se revisa Stripe: una tienda que cobra perfectamente salia
+      // con "no pude leer la cuenta de Stripe" como si estuviera rota.
+      const s = (st as { gateway?: string }).gateway === "whop"
+        ? await whopTasks(st.id as string)
+        : await stripeTasks(st.id as string, st.slug as string, a);
       out.push({
         slug: st.slug as string, name: (st.display_name || st.name) as string, url: a.url, account: s.account,
         catalogProblems, stripeTasks: s.tasks, stripeOk: s.tasks.length === 0, stripeInfo: s.info,
