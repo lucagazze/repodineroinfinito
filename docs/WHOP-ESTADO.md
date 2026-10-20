@@ -293,3 +293,65 @@ Y el marco payment ya estaba funcionando: mandaba `selectionChanged type:card`,
 estaba en un comentario del `.d.ts` instalado, no en la red. Se perdieron varias
 vueltas probando entornos cuando `grep -n "Required" node_modules/@whop/...`
 lo resolvia.
+
+---
+
+## 20/10/2026 — la primera venta real se cobro y NO se entrego
+
+Un pago de 1 USD entro bien en Whop y el comprador no recibio nada: vio
+"no encontramos tu pedido" (en italiano) y el panel marcaba 0 ventas.
+
+**Cuatro errores encadenados, todos mios, todos por suponer la forma de los
+datos en vez de medirla.**
+
+### 1. El importe no es un numero
+
+`settlement_amount`, `total` y `subtotal` son OBJETOS de dinero:
+
+```json
+{"currency":"usd","amount":"1.00","decimals":2,"display_decimals":2}
+```
+
+con el importe en CADENA y en unidades mayores. Y en un cobro con token
+`settlement_amount` **ni siquiera viene**. Se intentaba guardar el objeto entero
+en una columna numerica:
+
+```
+invalid input syntax for type numeric: "{"currency":"usd","amount":"1.00",...}"
+```
+
+El webhook devolvia 500 con el dinero ya cobrado. Y como la pagina de gracias
+rescata por el MISMO camino, tampoco podia salvarlo.
+
+Arreglado en `src/lib/whop-montos.ts`, sin dependencias, con 11 casos de prueba.
+El primero es el cuerpo EXACTO del pago que se perdio.
+
+### 2. El pago no trae el correo del comprador
+
+Whop da `user: {id, username, name}` y nada mas. `fulfill` tira error sin correo,
+asi que la entrega habria fallado igual con el importe arreglado. Ahora se
+resuelve desde la fila del checkout por `metadata.checkout`.
+
+### 3. El checkout quedaba `open` despues de pagar
+
+`fulfill` lo enlaza por `stripe_payment_intent`, y `/api/whop/pay` nunca escribia
+el id del pago en esa fila (con Stripe lo hace `/api/pi`). Un checkout `open`
+cuenta como carrito abandonado: **le hubiera salido el mail de recuperacion a
+alguien que ya habia comprado**. Ahora se escribe al cobrar Y `fulfill` enlaza
+tambien por `metadata.checkout`.
+
+### 4. La pagina de gracias hablaba en italiano
+
+`DEFAULT_LOCALE` es `it` (la app nacio para una tienda italiana). Sin pedido
+caia ahi en vez de al idioma de la tienda. Ahora usa `stores.default_locale`.
+
+### Lo que SI funcionaba
+
+La verificacion de firma del webhook, que era mi principal sospechoso, estaba
+perfecta. Se perdio tiempo mirando ahi.
+
+### La leccion
+
+**Medir la forma de la respuesta antes de escribir el codigo que la consume.**
+Un `console.log` del primer pago real hubiera ahorrado los cuatro. El tipo
+`PagoWhop` estaba escrito desde la documentacion, no desde un cuerpo real.

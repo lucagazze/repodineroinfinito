@@ -140,9 +140,15 @@ export async function fulfill(args: {
   if (e1 || !order) throw new Error(`pedido no encontrado después de guardarlo: ${e1?.message}`);
 
   if (order.status === "paid") {
-    await db.from("checkouts")
-      .update({ status: "paid", order_id: order.id, ...(args.email ? { email: args.email } : {}) })
-      .eq("stripe_payment_intent", args.paymentId);
+    // Por el id del pago, y TAMBIEN por el id del checkout que viaja en la
+    // metadata. Con Whop la primera via puede no existir -- el cobro no pasa
+    // por /api/pi -- y un checkout que queda `open` despues de pagar se cuenta
+    // como carrito abandonado y recibe su mail de recuperacion, por una compra
+    // que si se completo.
+    const marcar = { status: "paid", order_id: order.id, ...(args.email ? { email: args.email } : {}) };
+    await db.from("checkouts").update(marcar).eq("stripe_payment_intent", args.paymentId);
+    const ckId = typeof args.metadata.checkout === "string" ? args.metadata.checkout : null;
+    if (ckId) await db.from("checkouts").update(marcar).eq("id", ckId).neq("status", "paid");
     // Aviso del pedido al panel: YA, apenas se cobra (como la plataforma anterior). Cada post-compra manda el suyo.
     const bumpCount = String(args.metadata.bumps ?? "").split(",").filter(Boolean).length;
     later(() => pushSaleOnce(order.id, bumpCount));

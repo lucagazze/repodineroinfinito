@@ -39,6 +39,14 @@ async function checkoutBack(pi: string) {
   return `${checkoutUrl(f, f.stores.slug)}?${q}`;
 }
 
+/** El idioma por defecto de una tienda, para cuando todavía no hay pedido. */
+async function localeDeTienda(slug: string | undefined): Promise<Locale | null> {
+  if (!slug) return null;
+  const { data } = await db.from("stores").select("default_locale").eq("slug", slug).maybeSingle();
+  const l = data?.default_locale as string | undefined;
+  return l && l in T ? (l as Locale) : null;
+}
+
 /** Configuración › Entrega › Página de gracias. Vacío = los textos de siempre. */
 type Thankyou = { title?: string; message?: string; showSummary?: boolean; showSpam?: boolean };
 
@@ -56,8 +64,10 @@ export default async function Gracias({
   if (!ref) return <Shell><Card><h1>{T[DEFAULT_LOCALE].missingId}</h1></Card></Shell>;
 
   const order = await findOrder(ref, sp.store ?? null);
-  // Siempre el idioma en que compró.
-  const locale = ((order?.locale as Locale) ?? DEFAULT_LOCALE) as Locale;
+  // Siempre el idioma en que compró. Sin pedido, el de SU tienda -- no el de la
+  // app: DEFAULT_LOCALE es italiano (la app nació para una tienda italiana) y un
+  // comprador inglés que no encontraba su pedido recibía el aviso en italiano.
+  const locale = ((order?.locale as Locale) ?? (await localeDeTienda(sp.store)) ?? DEFAULT_LOCALE) as Locale;
   const t = T[locale] ?? T.en;
 
   if (!order) {

@@ -130,6 +130,16 @@ export async function POST(req: NextRequest) {
       descripcion: `${brandFor(tienda, locale)} — ${q.lines[0].product.short_name}`,
     });
 
+    // El id del pago, en la fila del checkout. Con Stripe lo escribe /api/pi al
+    // crear el intento; acá no existía y el checkout quedaba `open` para
+    // siempre: contado como carrito abandonado, con su mail de recuperación
+    // saliendo por una compra que SÍ se completó.
+    if (checkoutId) {
+      await db.from("checkouts")
+        .update({ stripe_payment_intent: `whop:${pago.id}` })
+        .eq("id", checkoutId);
+    }
+
     // El cobro es ASINCRONO: esta respuesta dice en que quedó el intento, no
     // que el dinero entró. La entrega la dispara el webhook payment.succeeded,
     // nunca esta respuesta.
