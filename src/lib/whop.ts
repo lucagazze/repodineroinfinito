@@ -198,9 +198,17 @@ export type PagoWhop = {
   /** No siempre viene: en un cobro con token no aparece. */
   settlement_amount?: MontoWhop | number | null;
   refunded_amount?: MontoWhop | number | null;
+  /** Lo que queda DESPUES de las comisiones de Whop: lo que entra al balance. */
+  amount_after_fees?: MontoWhop | number | null;
   metadata?: Record<string, string> | null;
-  /** OJO: no trae email. Whop solo da id, username y name. */
+  /** `user` NO trae email: solo id, username y name. El correo viene aparte. */
   user?: { id?: string; email?: string | null; name?: string | null; username?: string | null } | null;
+  /** El correo del comprador, en la RAIZ del pago. Medido el 20/10/2026. */
+  customer_email?: string | null;
+  /** mber_... y payt_..., tambien en la RAIZ. Las formas anidadas se aceptan
+   *  por si cambian, pero las que llegan hoy son estas dos. */
+  member_id?: string | null;
+  payment_method_id?: string | null;
   member?: { id?: string } | null;
   plan?: { id?: string } | null;
   product?: { id?: string } | null;

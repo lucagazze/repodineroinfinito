@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { applyRefund, fulfill } from "@/lib/fulfill";
 import { DEFAULT_LOCALE } from "@/lib/i18n";
-import { montoCobrado, type PagoWhop } from "@/lib/whop";
+import { aNumero, montoCobrado, type PagoWhop } from "@/lib/whop";
 
 /**
  * Qué hacer con cada evento de Whop.
@@ -79,9 +79,18 @@ export async function entregarPagoWhop(
 ) {
   // El id del medio de pago guardado llega acá y en ningún otro lado: es lo
   // que después permite cobrar el upsell de 1 clic sin pedir la tarjeta.
+  // En la RAIZ del pago, no anidados. Medido el 20/10/2026 contra un pago real:
+  // `member.id` y `payment_method.id` no existen, y leerlos de ahi dejaba los
+  // dos campos en null -- o sea, sin la tarjeta guardada no hay upsell de 1
+  // clic, que es justo para lo que pedimos setup_future_usage.
   const guardar: Record<string, unknown> = {};
-  if (pago.member?.id) guardar.whop_member_id = pago.member.id;
-  if (pago.payment_method?.id) guardar.whop_payment_method_id = pago.payment_method.id;
+  const miembro = pago.member_id ?? pago.member?.id;
+  const medio = pago.payment_method_id ?? pago.payment_method?.id;
+  if (miembro) guardar.whop_member_id = miembro;
+  if (medio) guardar.whop_payment_method_id = medio;
+  // Lo que de verdad entra al balance, despues de las comisiones de Whop.
+  const neto = aNumero(pago.amount_after_fees);
+  if (neto !== null) guardar.net_amount = neto;
 
   // El correo NO viene en el pago: Whop solo da id, username y name. Y sin
   // correo `fulfill` tira error y el comprador, que ya pago, no recibe nada.
@@ -120,7 +129,8 @@ export async function entregarPagoWhop(
  * se entrego a nadie.
  */
 async function correoDe(pago: PagoWhop): Promise<string | null> {
-  const directo = pago.user?.email?.trim();
+  // `customer_email` es el que llega de verdad; `user.email` no viene.
+  const directo = pago.customer_email?.trim() || pago.user?.email?.trim();
   if (directo) return directo;
   const ck = pago.metadata?.checkout;
   if (!ck) return null;
