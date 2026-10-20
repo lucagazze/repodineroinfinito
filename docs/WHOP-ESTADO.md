@@ -178,7 +178,7 @@ Dos cosas que bloqueaban y ya estan arregladas:
    variables: el CLI de Vercel imprime la tabla por **stderr** y el script
    descartaba stderr. Corregido, con un respaldo que la saca del log del deploy.
 
-### El formulario de Whop sigue sin cargar — y NO es http
+### ~~El formulario de Whop sigue sin cargar~~ — RESUELTO, ver abajo
 
 Probado sobre HTTPS real, mismo resultado que en localhost:
 
@@ -192,8 +192,7 @@ Probado sobre HTTPS real, mismo resultado que en localhost:
   does not match the recipient window's origin`
 
 Pasa igual en el banco minimo `/whop-prueba`, asi que **no es el checkout**.
-Queda: el navegador embebido, o un error del propio SDK (`cdn.whop.com/elements/
-amber/`, canal que Whop reconstruye cada pocos minutos).
+**La causa real estaba en otro lado: faltaba `<BrandingElement />`. Ver abajo.**
 
 Mientras tanto el comprador **no** se queda mirando un recuadro gris: a los 12 s
 aparece un aviso con un boton de reintentar que vuelve a montar el elemento.
@@ -243,3 +242,54 @@ Despues de las correcciones: **0 errores**, 5 avisos, todos reales.
 | Token de Conversions API del pixel | Bruno |
 | `business.phone` vacio | Bruno |
 | Post-pago | diferido: necesita un segundo libro |
+
+---
+
+## 20/10/2026 — RESUELTO: faltaba `<BrandingElement />`
+
+El formulario de tarjeta se quedaba en su esqueleto gris para siempre. La causa
+no era el navegador, ni `http`, ni la cuenta, ni la integracion.
+
+**Lo dicen los propios tipos del SDK**, en `@whop/elements-react/payments.d.ts`:
+
+> *"Whop's merchant-of-record notice... **Required — the payment, card and card
+> fields elements stay in their loading state until it is mounted.**"*
+
+Sin `<BrandingElement />` dentro de `<Payments>`, el marco `payment` NUNCA manda
+su `ready`. Y no falla con un error: queda vivo, emitiendo eventos, mostrando su
+propio cargador encima de un formulario que ya existe.
+
+### Como se encontro (sirve para la proxima)
+
+Lo que destrabo el diagnostico fue **registrar el dialogo entre ventanas desde
+ANTES de `loadWhop()`** — un listener puesto despues no ve el saludo, que ocurre
+en los primeros 300 ms. Esta en `src/app/whop-prueba/page.tsx` (404 en produccion).
+
+Con eso a la vista, la asimetria salto sola:
+
+```
+_toaster                      boot -> ready -> resize -> loading
+billing-address-suggestions   boot -> resize -> ready -> resize -> loading
+payment                       boot -> resize -> loading -> (eventos) ... SIN ready
+```
+
+Y el marco payment ya estaba funcionando: mandaba `selectionChanged type:card`,
+`addressChange country:AR` y `charge {configured:true, amount:3700}`.
+
+### Lo que se descarto por el camino, con prueba
+
+| Hipotesis | Como se descarto |
+|---|---|
+| Es `http://localhost` | pasa igual sobre HTTPS en produccion |
+| Es el navegador embebido | Bruno lo vio igual en su Chrome |
+| La cuenta no puede cobrar | `POST /payments` responde pidiendo el token, no rechazando |
+| Es la integracion del checkout | el banco minimo fallaba identico |
+| Version del SDK atrasada | 1.9.0 instalada = 1.9.0 publicada |
+| Una CSP bloquea los marcos | la app no manda ninguna CSP |
+
+### La leccion
+
+**Leer los tipos del paquete antes de buscar la causa afuera.** La respuesta
+estaba en un comentario del `.d.ts` instalado, no en la red. Se perdieron varias
+vueltas probando entornos cuando `grep -n "Required" node_modules/@whop/...`
+lo resolvia.

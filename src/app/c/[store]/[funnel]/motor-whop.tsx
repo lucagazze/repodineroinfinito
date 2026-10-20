@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useRef, useState } from "react";
 import { loadWhop } from "@whop/elements";
-import { WhopElements, Payments, PaymentElement, usePayments } from "@whop/elements-react";
+import { WhopElements, Payments, PaymentElement, BrandingElement, usePayments } from "@whop/elements-react";
 import { toMinor } from "@/lib/minor";
 import { track as logEvent } from "@/lib/track-client";
 import { fbIds } from "@/components/MetaPixel";
@@ -177,6 +177,16 @@ export function useMotorWhop(c: CtxMotor): Motor {
         <div className="ck-paycard">
           {/* El elemento trae su propio aviso de carga; no se tapa con otro. */}
           <PaymentElement onError={(e) => setFallo(e.message || t.ckPayNotDone)} />
+          {/*
+            OBLIGATORIO, y no es decorativo. Los propios tipos del SDK lo dicen:
+            "the payment, card and card fields elements stay in their loading
+            state until it is mounted". Sin esto el formulario de tarjeta se
+            queda en su esqueleto gris PARA SIEMPRE -- vivo por dentro, emitiendo
+            eventos, pero sin mandar nunca su `ready`. Nadie puede comprar.
+            Ademas es el aviso de comerciante de registro de Whop (sus terminos
+            de comprador), asi que tambien tiene que estar por motivos legales.
+          */}
+          <BrandingElement />
         </div>
       </>
     ),
