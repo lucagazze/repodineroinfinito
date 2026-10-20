@@ -83,11 +83,16 @@ export async function entregarPagoWhop(
   if (pago.member?.id) guardar.whop_member_id = pago.member.id;
   if (pago.payment_method?.id) guardar.whop_payment_method_id = pago.payment_method.id;
 
+  // El correo NO viene en el pago: Whop solo da id, username y name. Y sin
+  // correo `fulfill` tira error y el comprador, que ya pago, no recibe nada.
+  // El dato esta en la fila del checkout, enlazada por metadata.checkout.
+  const correo = await correoDe(pago);
+
   await fulfill({
     provider: "whop",
     paymentId: PREFIJO + pago.id,
     customerId: pago.user?.id ?? null,
-    email: pago.user?.email ?? null,
+    email: correo,
     name: pago.user?.name ?? null,
     phone: null,
     country: null,
@@ -101,6 +106,26 @@ export async function entregarPagoWhop(
   if (Object.keys(guardar).length) {
     await db.from("orders").update(guardar).eq("stripe_payment_intent", PREFIJO + pago.id);
   }
+}
+
+/**
+ * El correo del comprador.
+ *
+ * Whop NO lo manda en el pago (medido el 20/10/2026: `user` trae id, username
+ * y name, nada mas). Se saca de la fila del checkout, que lo guarda apenas el
+ * comprador lo escribe -- el mismo dato que alimenta la recuperacion de carrito.
+ *
+ * Si falta, se devuelve null y `fulfill` falla a proposito: es preferible que
+ * el webhook de error y Whop reintente, a registrar una venta entregada que no
+ * se entrego a nadie.
+ */
+async function correoDe(pago: PagoWhop): Promise<string | null> {
+  const directo = pago.user?.email?.trim();
+  if (directo) return directo;
+  const ck = pago.metadata?.checkout;
+  if (!ck) return null;
+  const { data } = await db.from("checkouts").select("email").eq("id", ck).maybeSingle();
+  return (data?.email as string | undefined)?.trim() || null;
 }
 
 /** Resuelve a qué tienda/embudo corresponde un pago. Expuesto para la página de gracias. */

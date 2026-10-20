@@ -13,10 +13,11 @@
     "check:links": "node --experimental-strip-types scripts/check-public-url.mjs",
     "test:pujas": "node --experimental-strip-types --test scripts/test-pujas.mjs",
     "test:autopilot": "node --experimental-strip-types --test scripts/test-autopilot.mjs",
-    "test": "npm run check:links && npm run test:pujas && npm run test:autopilot && npm run test:whop && npm run test:acento",
+    "test": "npm run check:links && npm run test:pujas && npm run test:autopilot && npm run test:whop && npm run test:acento && npm run test:montos",
     "deploy:safe": "bash scripts/deploy-safe.sh",
     "test:whop": "node --experimental-strip-types scripts/check-whop-firma.mjs",
-    "test:acento": "node --experimental-strip-types scripts/check-whop-acento.mjs"
+    "test:acento": "node --experimental-strip-types scripts/check-whop-acento.mjs",
+    "test:montos": "node --experimental-strip-types scripts/check-whop-montos.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "^2.3.1",

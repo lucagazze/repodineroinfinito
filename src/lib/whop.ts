@@ -1,5 +1,9 @@
 import { db } from "@/lib/db";
 import { decrypt } from "@/lib/secrets";
+import { aNumero, type MontoWhop } from "@/lib/whop-montos";
+
+export { aNumero, montoCobrado } from "@/lib/whop-montos";
+export type { MontoWhop } from "@/lib/whop-montos";
 
 /**
  * Cobrar con Whop, en paralelo a Stripe.
@@ -189,26 +193,18 @@ export type PagoWhop = {
   id: string;
   status: string;
   currency: string;
-  subtotal?: number;
-  total?: number;
-  settlement_amount?: number;
-  refunded_amount?: number;
+  subtotal?: MontoWhop | number | null;
+  total?: MontoWhop | number | null;
+  /** No siempre viene: en un cobro con token no aparece. */
+  settlement_amount?: MontoWhop | number | null;
+  refunded_amount?: MontoWhop | number | null;
   metadata?: Record<string, string> | null;
-  user?: { id?: string; email?: string | null; name?: string | null } | null;
+  /** OJO: no trae email. Whop solo da id, username y name. */
+  user?: { id?: string; email?: string | null; name?: string | null; username?: string | null } | null;
   member?: { id?: string } | null;
   plan?: { id?: string } | null;
   product?: { id?: string } | null;
   payment_method?: { id?: string } | null;
 };
 
-/**
- * Lo que efectivamente se le cobro al comprador, en unidades mayores.
- *
- * `settlement_amount` es el unico que la documentacion define como el total
- * cobrado con impuestos y despues de descuentos; `total` es lo que ve el
- * vendedor y `subtotal` excluye las comisiones del comprador. Para reconciliar
- * contra lo que entro, el que vale es settlement_amount.
- */
-export function montoCobrado(p: PagoWhop): number {
-  return p.settlement_amount ?? p.total ?? p.subtotal ?? 0;
-}
+
