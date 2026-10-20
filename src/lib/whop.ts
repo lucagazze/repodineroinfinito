@@ -124,6 +124,53 @@ export function cobrarGuardada(apiKey: string, args: {
   });
 }
 
+/**
+ * Cobra el token que devolvió el formulario embebido, con el comprador presente.
+ *
+ * El token NO es la tarjeta: los datos fueron de los campos aislados de Whop a
+ * Whop sin pasar por nuestro servidor. Es una referencia de un solo uso.
+ *
+ * Se cobra un monto EN LINEA en vez de un plan: el total sale de la cotización
+ * del servidor con los bumps que el comprador tildó, y un plan fijo obligaría a
+ * crear una variante por cada combinación posible.
+ *
+ * La respuesta llega antes de que el dinero entre. Quien dispara la entrega es
+ * el webhook `payment.succeeded`, nunca esto.
+ */
+export function cobrarConToken(apiKey: string, args: {
+  accountId: string;
+  confirmationToken: string;
+  currency: string;
+  /** En unidades MENORES: 3700 son 37,00. */
+  amount: number;
+  email?: string;
+  name?: string;
+  /** A donde vuelve el comprador tras un 3D Secure. Whop le agrega status y client_secret. */
+  returnUrl: string;
+  setupFutureUsage?: "off_session" | "on_session";
+  metadata?: Record<string, string>;
+  idempotencyKey?: string;
+  descripcion?: string;
+}) {
+  return pedir<{ id: string; status: string; client_secret?: string; next_action?: unknown }>(
+    apiKey, "/payments", {
+      method: "POST",
+      ...(args.idempotencyKey ? { headers: { "idempotency-key": args.idempotencyKey } } : {}),
+      body: JSON.stringify({
+        account_id: args.accountId,
+        confirmation_token: args.confirmationToken,
+        plan: { currency: args.currency, initial_price: args.amount / 100, plan_type: "one_time" },
+        ...(args.email ? { email: args.email } : {}),
+        return_url: args.returnUrl,
+        // false: el comprador ESTA presente. Aprueba mejor y, si el banco pide
+        // autenticacion, el pago vuelve con requires_action en vez de caerse.
+        off_session: false,
+        ...(args.setupFutureUsage ? { setup_future_usage: args.setupFutureUsage } : {}),
+        ...(args.metadata ? { metadata: args.metadata } : {}),
+      }),
+    });
+}
+
 /** Medios de pago guardados de un comprador. */
 export function mediosDe(apiKey: string, memberId: string) {
   return pedir<{ data: Array<{ id: string; type?: string }> }>(
