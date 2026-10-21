@@ -403,6 +403,18 @@ export default function CampaignTable({ perf, pageKey, source = "meta" }: { perf
             <span className={`min-w-0 flex-1 break-words text-[13.5px] leading-snug text-zinc-900 dark:text-white ${depth ? "font-medium" : "font-semibold"}`}>
               <Pv as={alias.get(key) ?? LEVEL_NAME[n.level]}>{n.name}</Pv>
             </span>
+            {/* A qué oferta pertenece. En una cuenta publicitaria COMPARTIDA con
+                otra marca (la de Finance Study Lab es la misma que la de
+                Physics Study Lab) una campaña ajena se veía igual que una
+                propia: con gasto y cero ventas, porque esta app no puede ver
+                las ventas de la otra marca. Sin esta etiqueta se lee como una
+                campaña propia que no vende. `links` ya se calculaba y no se
+                mostraba en ningún lado. */}
+            {n.level === "campaign" && (
+              n.links.length
+                ? <span className="mt-0.5 shrink-0 whitespace-nowrap rounded-full bg-emerald-50 px-2 py-0.5 text-[10.5px] font-semibold text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">{n.links.join(" · ")}</span>
+                : <span className="mt-0.5 shrink-0 whitespace-nowrap rounded-full bg-zinc-100 px-2 py-0.5 text-[10.5px] font-semibold text-zinc-500 dark:bg-white/[0.06] dark:text-zinc-400" title="Esta campaña no está vinculada a ninguna oferta de esta app: su gasto aparece pero sus ventas no se pueden ver desde acá.">sin oferta vinculada</span>
+            )}
             {kids && <span className="mt-0.5 shrink-0 whitespace-nowrap text-[11px] font-medium text-zinc-400">{inside(n)}</span>}
             {kids && <ChevronRight className={`mt-0.5 h-4 w-4 shrink-0 text-zinc-400 transition-transform ${isOpen ? "rotate-90" : ""}`} aria-hidden />}
           </span>
