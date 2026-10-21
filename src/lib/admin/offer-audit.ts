@@ -292,9 +292,14 @@ export async function auditOffers(opts: { storeId?: string; offerKey?: string } 
         ? { status: "off", label: "Apagado por ley (Alemania)", detail: "En Alemania y Austria el mail de carrito abandonado necesita consentimiento previo (UWG §7): queda apagado a propósito." }
         : { status: "warn", label: "Apagada", detail: "Los carritos abandonados no reciben mail de recuperación." };
     const recOn = fr?.record_sessions !== false;
-    const recording: AuditCell = recOn
-      ? { status: "ok", label: "Encendida", detail: `Grabación de sesiones de la app encendida · Clarity ${clarityProject({ store: o.store.slug })}.` }
-      : { status: "warn", label: "Apagada", detail: "No se graban las sesiones de este checkout (En vivo › grabación)." };
+    const recProject = clarityProject({ store: o.store.slug });
+    const recording: AuditCell = !recOn
+      ? { status: "warn", label: "Apagada", detail: "No se graban las sesiones de este checkout (En vivo › grabación)." }
+      : recProject
+        ? { status: "ok", label: "Encendida", detail: `Grabación de sesiones de la app encendida · Clarity ${recProject}.` }
+        // Decia "Encendida" sin proyecto detras: la app grababa sus propios pasos
+        // pero NO habia grabacion de pantalla que mirar.
+        : { status: "warn", label: "Sin Clarity", detail: "Los pasos quedan registrados en «En vivo», pero no hay grabación de pantalla: falta NEXT_PUBLIC_CLARITY_ID." };
 
     const cells = { landing, checkout, pixel, events, bumps, post, downsells, delivery, webhook, recovery, recording };
     return {

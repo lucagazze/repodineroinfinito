@@ -3232,5 +3232,5 @@ CREATE TRIGGER stores_touch BEFORE UPDATE ON public.stores FOR EACH ROW EXECUTE 
 revoke execute on all functions in schema public from public, anon, authenticated;
 
 -- ---------- Storage ----------
-insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types) values ('entregas', 'entregas', false, 524288000, array['application/pdf']) on conflict (id) do update set public = excluded.public, file_size_limit = excluded.file_size_limit, allowed_mime_types = excluded.allowed_mime_types;
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types) values ('entregas', 'entregas', false, 524288000, array['application/pdf','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','application/vnd.ms-excel','text/csv']) on conflict (id) do update set public = excluded.public, file_size_limit = excluded.file_size_limit, allowed_mime_types = excluded.allowed_mime_types;
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types) values ('media', 'media', true, 10000000, null) on conflict (id) do update set public = excluded.public, file_size_limit = excluded.file_size_limit, allowed_mime_types = excluded.allowed_mime_types;

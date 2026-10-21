@@ -42,7 +42,12 @@ function safeMask(enc: string | null) {
   }
 }
 
-export function productOut(p: ProductRow) {
+/**
+ * `variantOf` se pasa resuelto a slug: en la base `variant_of` es un id, y
+ * devolver un UUID en una respuesta que habla de slugs no le sirve a nadie.
+ * Sin pasarlo, al menos se informa que ES una variante en vez de callarlo.
+ */
+export function productOut(p: ProductRow, variantOf?: string | null) {
   return {
     slug: p.slug,
     name: p.name,
@@ -53,6 +58,15 @@ export function productOut(p: ProductRow) {
     description: p.description,
     delivery_url: p.delivery_url,
     delivery_links: p.delivery_links ?? [],
+    // El archivo propio en el bucket privado es entrega tan valida como un link
+    // (de hecho la mas segura). Omitirlo aca hacia que get_product mostrara
+    // "nada que entregar" sobre un producto que entrega perfecto.
+    delivery_file: p.delivery_file,
+    variant_of: variantOf ?? (p.variant_of ? "(otro producto de la tienda)" : null),
+    includes: p.includes ?? [],
+    presale: !!p.presale,
+    presale_days: p.presale_days ?? null,
+    postcompra_page: p.postcompra_page ?? null,
     image_url: p.image_url,
     email_image_url: p.email_image_url,
     prices: [...(p.product_prices ?? [])]
@@ -716,16 +730,18 @@ export function registerReadTools(server: McpServer) {
     title: "List products",
     kind: "read",
     description:
-      "Products of a store: slug, name, short_name, kind (main = sold as checkout main product, upsell = sold as order bump or 1-click upsell, bonus = free gift), active, show_in_catalog, prices per currency (major units: amount = price charged, compare_at = struck-through price, display_value = stated value of a free bonus), whether it has a delivery link, image URL, and where it's used ([{checkout, role}] with role main|included|bonus|bump|upsell).",
+      "Products of a store: slug, name, short_name, kind (main = sold as checkout main product, upsell = sold as order bump or 1-click upsell, bonus = free gift), active, show_in_catalog, prices per currency (major units: amount = price charged, compare_at = struck-through price, display_value = stated value of a free bonus), whether it has anything to deliver (a link, several links, or its own file in the private bucket), image URL, and where it's used ([{checkout, role}] with role main|included|bonus|bump|upsell).",
     input: z.object({ store: storeArg, include_inactive: z.boolean().default(true) }),
     handler: async ({ store, include_inactive }) => {
       const s = await getStore(store);
       const [products, usage] = await Promise.all([storeProducts(s.id), usageMap(s.id)]);
+      const slugDe = new Map(products.map((p) => [p.id, p.slug]));
       return products.filter((p) => include_inactive || p.active).map((p) => {
-        const o = productOut(p);
+        const o = productOut(p, p.variant_of ? slugDe.get(p.variant_of) ?? null : null);
         return {
           slug: o.slug, short_name: o.short_name, kind: o.kind, active: o.active, show_in_catalog: o.show_in_catalog,
-          prices: o.prices, has_delivery: !!(p.delivery_url || (p.delivery_links ?? []).length), image_url: o.image_url,
+          prices: o.prices, has_delivery: !!(p.delivery_url || (p.delivery_links ?? []).length || p.delivery_file), image_url: o.image_url,
+          variant_of: o.variant_of, includes: o.includes, presale: o.presale,
           used_in: usage.get(p.id) ?? [],
         };
       });
@@ -736,7 +752,7 @@ export function registerReadTools(server: McpServer) {
     title: "Get product",
     kind: "read",
     description:
-      "One product in full: name, short_name, description, kind, active, show_in_catalog, prices per currency (major units), delivery_url + extra delivery_links [{label,url}], image_url (WebP for the checkout) and email_image_url (JPG for emails), the checkouts that use it and in which role, post-purchase funnels that offer it, and units sold.",
+      "One product in full: name, short_name, description, kind, active, show_in_catalog, prices per currency (major units), everything it delivers (delivery_url, extra delivery_links [{label,url}] and delivery_file, its own file in the private bucket), variant_of / includes / presale, image_url (WebP for the checkout) and email_image_url (JPG for emails), the checkouts that use it and in which role, post-purchase funnels that offer it, and units sold.",
     input: z.object({ store: storeArg, product: z.string().min(1).describe("Product slug (see list_products).") }),
     handler: async ({ store, product }) => {
       const s = await getStore(store);

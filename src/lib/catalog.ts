@@ -39,6 +39,9 @@ export type CatalogStore = {
   statement_descriptor: string | null;
   brand: Record<string, unknown> | null;
   business: Business | null;
+  /** "stripe" | "whop": con Whop el comerciante de registro es Whop, asi que los
+   *  datos legales que revisa un procesador no corren igual. Ver phoneRequired. */
+  gateway: string | null;
 };
 
 export type ItemKind = "product" | "addon" | "after" | "bonus";
@@ -65,9 +68,12 @@ export type Catalog = {
   items: CatalogItem[];
 };
 
+// OJO: lista explicita de columnas. Si agregas un campo a la tienda que el
+// catalogo use, agregalo TAMBIEN aca o llega undefined sin ningun error. A
+// `gateway` ya le paso tres veces.
 const STORE_COLS =
   "id,slug,name,display_name,logo_url,domain,catalog_domain,support_email,default_locale,guarantee_days," +
-  "legal_name,legal_address,statement_descriptor,brand,business";
+  "legal_name,legal_address,statement_descriptor,brand,business,gateway";
 
 const KIND_ORDER: Record<ItemKind, number> = { product: 0, addon: 1, after: 2, bonus: 3 };
 
@@ -85,10 +91,31 @@ export function appBase(): string {
   return (process.env.PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_SITE_URL || "").replace(/\/+$/, "");
 }
 
-/** Checkout de un embudo: en el dominio propio de la tienda si lo tiene. */
+/**
+ * Checkout de un embudo: en el dominio propio de la tienda si lo tiene.
+ *
+ * Con una salvedad que costaba un 404: el dominio de la tienda puede ser a la vez
+ * el host de la app (el panel vive en pay.financestudylab.com). En ese caso
+ * `isAppHost` del middleware corta antes de la rama de dominio de tienda y la
+ * ruta corta /{embudo} NO se sirve -- hay que usar la larga, que anda en
+ * cualquier host. Esto lo usa el catalogo para el link de compra de cada
+ * producto, asi que un link mal armado aca es una venta perdida.
+ */
 export function checkoutHref(store: { slug: string; domain?: string | null }, funnelSlug: string): string {
   const d = normHost(store.domain);
-  return d ? `https://${d}/${funnelSlug}` : `${appBase()}/c/${store.slug}/${funnelSlug}`;
+  const app = normHost(appBase());
+  if (d && d !== app) return `https://${d}/${funnelSlug}`;
+  return `${d ? `https://${d}` : appBase()}/c/${store.slug}/${funnelSlug}`;
+}
+
+/**
+ * Si el catalogo tiene que publicar un telefono. Con Whop el comerciante de
+ * registro es Whop: la razon social, la direccion y el telefono de contacto que
+ * revisa un procesador los pone Whop, no la tienda. Con Stripe la tienda es el
+ * comerciante y si hace falta.
+ */
+export function phoneRequired(s: { gateway?: string | null }): boolean {
+  return (s.gateway ?? "stripe") !== "whop";
 }
 
 /**

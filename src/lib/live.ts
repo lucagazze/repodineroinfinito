@@ -513,9 +513,17 @@ export async function visitorJourney(vid: string): Promise<VisitorJourney> {
   }).sort((a, b) => (a.start < b.start ? 1 : -1));
 
   // Proyecto de Clarity de cada sitio por el que pasó (casi siempre uno).
+  // Solo proyectos de verdad: con NEXT_PUBLIC_CLARITY_ID vacio el link quedaba
+  // en /projects/view//impressions y abria un error.
   const projects = new Set<string>();
-  for (const r of rows) projects.add(clarityProject({ store: r.store_id ? slugOf.get(r.store_id) : null, host: r.host }));
-  if (!projects.size) projects.add(clarityProject({}));
+  for (const r of rows) {
+    const pr = clarityProject({ store: r.store_id ? slugOf.get(r.store_id) : null, host: r.host });
+    if (pr) projects.add(pr);
+  }
+  if (!projects.size) {
+    const pr = clarityProject({});
+    if (pr) projects.add(pr);
+  }
 
   const lastLive = liveQ.data?.[0]?.event;
   return {

@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { getCatalog, phoneOf, type CatalogItem } from "@/lib/catalog";
+import { getCatalog, phoneOf, phoneRequired, catalogUrls, type CatalogItem } from "@/lib/catalog";
 import { catalogFacts, type CatalogFacts } from "@/lib/catalog-facts";
 
 /**
@@ -39,7 +39,11 @@ export async function auditCatalog(slug: string): Promise<CatalogAudit | null> {
   if (!cat) return null;
   const s = cat.store;
   const { data: row } = await db.from("stores").select("catalog_url").eq("slug", slug).maybeSingle();
-  const url = (row?.catalog_url as string | null) ?? (s.catalog_domain ? `https://${s.catalog_domain}/` : null);
+  // Sin dominio propio el catalogo NO esta caido: la app lo sirve igual en
+  // /catalogo/{slug}, y es la direccion que ya usan el checkout y los mails
+  // (catalogUrls). Auditar otra cosa daba "caido" y "N productos no aparecen"
+  // sobre un catalogo que respondia 200 y estaba completo.
+  const url = (row?.catalog_url as string | null) ?? catalogUrls(s).home;
   const items = cat.items;
   const counts = items.reduce<Record<string, number>>((a, i) => ({ ...a, [i.kind]: (a[i.kind] ?? 0) + 1 }), {});
 
@@ -66,7 +70,9 @@ export async function auditCatalog(slug: string): Promise<CatalogAudit | null> {
     { ok: !!s.legal_name, label: "Razón social", detail: s.legal_name ?? "falta" },
     { ok: !!s.legal_address, label: "Dirección legal", detail: s.legal_address ?? "falta" },
     { ok: !!s.support_email, label: "Email de soporte", detail: s.support_email },
-    { ok: !!phoneOf(s), label: "Teléfono", detail: phoneOf(s) ?? "falta" },
+    ...(phoneRequired(s)
+      ? [{ ok: !!phoneOf(s), label: "Teléfono", detail: phoneOf(s) ?? "falta" }]
+      : [{ ok: true, label: "Teléfono", detail: phoneOf(s) ?? "no hace falta: con Whop el contacto lo publica Whop" }]),
     { ok: !!s.statement_descriptor, label: "Descriptor de la tarjeta", detail: s.statement_descriptor ?? "falta" },
     { ok: (s.guarantee_days ?? 0) > 0, label: "Política de reembolso", detail: `${s.guarantee_days ?? 0} días` },
     { ok: !!b.about?.trim(), label: "Descripción del negocio", detail: b.about ? "con datos en vivo" : "falta" },

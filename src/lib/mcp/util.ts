@@ -141,9 +141,14 @@ export async function getStore(slug: string): Promise<StoreRow> {
   return data as unknown as StoreRow;
 }
 
+// OJO: lista explicita de columnas. Lo que no este aca llega como undefined y
+// las herramientas de lectura informan null sobre un dato que SI esta guardado.
+// Paso con `gateway` en las tiendas y con `variant_of` aca: upsert_product lo
+// guardaba bien y la respuesta decia variant_of: null.
 export const PRODUCT_COLS =
   "id,store_id,slug,name,short_name,description,kind,delivery_url,delivery_links,delivery_file,image_url,email_image_url,sort_order," +
-  "active,show_in_catalog,created_at,updated_at,product_prices(currency,amount,compare_at,display_value)";
+  "variant_of,includes,presale,presale_days,postcompra_page,active,show_in_catalog,created_at,updated_at," +
+  "product_prices(currency,amount,compare_at,display_value)";
 
 export type PriceRow = { currency: string; amount: number | string | null; compare_at: number | string | null; display_value: number | string | null };
 export type ProductRow = {
@@ -153,6 +158,14 @@ export type ProductRow = {
    *  y mas segura: se sirve con un enlace firmado de 10 minutos. */
   delivery_file: string | null;
   image_url: string | null;
+  /** id (no slug) del producto base cuando este es una variante de precio. */
+  variant_of: string | null;
+  /** slugs de los productos que se entregan DENTRO de este (un pack). */
+  includes: string[] | null;
+  presale: boolean | null;
+  presale_days: number | null;
+  /** Contenido de la pagina del OTO. upsert_product promete devolverla. */
+  postcompra_page: Record<string, unknown> | null;
   email_image_url: string | null; sort_order: number; active: boolean; show_in_catalog: boolean;
   created_at: string; updated_at: string; product_prices: PriceRow[];
 };

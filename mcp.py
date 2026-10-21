@@ -28,9 +28,13 @@ def rpc(method, params=None, notify=False):
         if r.headers.get("mcp-session-id"): _sid = r.headers["mcp-session-id"]
         raw = r.read().decode()
     if notify: return None
-    for line in raw.splitlines():                      # respuesta SSE
-        if line.startswith("data:"):
-            return json.loads(line[5:].strip())
+    # Respuesta SSE. OJO: un payload con saltos de linea viaja en VARIAS lineas
+    # "data:" y hay que volver a pegarlas con \n. Quedarse con la primera parte
+    # el JSON a la mitad y rompe en cualquier texto largo (una pagina de OTO,
+    # el markdown de la guia).
+    partes = [l[5:].lstrip() for l in raw.splitlines() if l.startswith("data:")]
+    if partes:
+        return json.loads("\n".join(partes))
     return json.loads(raw) if raw.strip() else None
 
 def conectar():
@@ -39,13 +43,20 @@ def conectar():
     rpc("notifications/initialized", {}, notify=True)
 
 def salida(r):
+    """Imprime la respuesta ENTERA.
+
+    Antes cortaba en 4000 caracteres sin decir nada: cualquier respuesta larga
+    -- la guia, un catalogo, una pagina de OTO -- salia partida al medio y el
+    JSON truncado reventaba al parsearlo, o peor, se leia como si estuviera
+    completo. Si hace falta un vistazo, se pipea a head.
+    """
     if r is None: return print("(sin respuesta)")
-    if "error" in r: return print("ERROR:", json.dumps(r["error"], ensure_ascii=False)[:1200])
+    if "error" in r: return print("ERROR:", json.dumps(r["error"], ensure_ascii=False))
     res = r.get("result", {})
     if res.get("structuredContent") is not None:
-        return print(json.dumps(res["structuredContent"], ensure_ascii=False, indent=1)[:4000])
+        return print(json.dumps(res["structuredContent"], ensure_ascii=False, indent=1))
     for c in res.get("content", []):
-        if c.get("type") == "text": print(c["text"][:4000])
+        if c.get("type") == "text": print(c["text"])
 
 if __name__ == "__main__":
     conectar()

@@ -129,9 +129,11 @@ function clarity(page: Page, c: TrackCtx) {
       const f: ClarityFn = function () { (f.q = f.q || []).push(arguments); };
       w.clarity = f;
     }
-    if (!clarityLoaded && !document.querySelector('script[src*="clarity.ms/tag/"]')) {
+    const id = clarityProject({ store: c.store, host: location.hostname });
+    // Sin NEXT_PUBLIC_CLARITY_ID el src quedaba en "clarity.ms/tag/" a secas:
+    // una peticion muerta en CADA carga del checkout, y nada que grabar.
+    if (id && !clarityLoaded && !document.querySelector('script[src*="clarity.ms/tag/"]')) {
       clarityLoaded = true;
-      const id = clarityProject({ store: c.store, host: location.hostname });
       const load = () => {
         const s = document.createElement("script");
         s.async = true;
