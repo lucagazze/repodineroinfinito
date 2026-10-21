@@ -7,7 +7,10 @@ el historial de la terminal y NO pasa por el chat. Lo que hace, en orden:
 
   1. valida el token contra el pixel de verdad (Graph API), no contra "algo"
   2. valida la cuenta publicitaria si la das
-  3. guarda el token cifrado (AES-256-GCM) en pixels.capi_token_enc, el codigo
+  3. prueba si ese MISMO token puede leer las campanias (ads_read). Si puede,
+     lo guarda tambien como META_ADS_TOKEN y el panel muestra el gasto; si no,
+     avisa que para eso hace falta un token de Usuario del sistema
+  4. guarda el token cifrado (AES-256-GCM) en pixels.capi_token_enc, el codigo
      de prueba en pixels.test_event_code y la cuenta en stores.meta_ad_account_id
 
 Se puede volver a correr: lo que dejes vacio no se toca.
@@ -20,6 +23,24 @@ RAIZ    = pathlib.Path(__file__).parent
 TIENDA  = "financestudylab"
 PIXEL   = "4633079520296335"
 GRAPH   = "v21.0"
+
+
+def guardar_env(clave, valor):
+    """Escribe una variable en .env.local (chmod 600, ignorado por git).
+
+    No va a la base: `META_ADS_TOKEN` lo lee el servidor desde el entorno, y
+    desplegar.sh sube .env.local a Vercel. Por eso hay que volver a desplegar
+    despues de correr esto.
+    """
+    p = RAIZ / ".env.local"
+    txt = p.read_text()
+    linea = f"{clave}={valor}"
+    if re.search(rf"(?m)^{clave}=.*$", txt):
+        txt = re.sub(rf"(?m)^{clave}=.*$", linea, txt)
+    else:
+        txt = txt.rstrip("\n") + "\n" + linea + "\n"
+    p.write_text(txt)
+    p.chmod(0o600)
 
 def entorno():
     env = {}
@@ -109,6 +130,26 @@ if token:
                  "  Suele ser que el token se genero para otro pixel o para otra app.\n")
     print(f"  OK  el token manda eventos a: {dato.get('name') or dato.get('id')}\n")
     guardar_token = cifrar(token)
+
+    # El panel lee el gasto de las campanias con OTRO permiso (ads_read) y por
+    # otra via (META_ADS_TOKEN del entorno, no la base). Si el mismo token lo
+    # tiene, se aprovecha: un token en vez de dos.
+    cuenta_guardada = supabase("GET", f"stores?slug=eq.{TIENDA}&select=meta_ad_account_id")
+    act = (cuenta_guardada[0].get("meta_ad_account_id") if cuenta_guardada else None)
+    if act:
+        act = "act_" + re.sub(r"^act_", "", str(act))
+        print(f"  probando si ademas puede leer la cuenta {act}...")
+        ok2, dato2 = graph(f"{act}/campaigns", token, "id")
+        if ok2:
+            guardar_env("META_ADS_TOKEN", token)
+            print("  OK  tambien lee las campanias: guardado como META_ADS_TOKEN en .env.local")
+            print("      (hay que volver a desplegar para que el panel lo tome)\n")
+        else:
+            print(f"  --  no lee las campanias: {dato2}")
+            print("      El token de Events Manager sirve solo para el pixel. Para que el panel")
+            print("      muestre el gasto hace falta un token de Usuario del sistema con ads_read")
+            print("      (business.facebook.com > Configuracion del negocio > Usuarios del sistema).")
+            print("      No es urgente: sin el, el panel no muestra campanias pero todo lo demas anda.\n")
     del token
 
 # ------------------------------------------------------- el codigo de prueba
