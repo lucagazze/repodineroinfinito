@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db, getProductById, STORE_COLS, type Product, type Store } from "@/lib/db";
 import { encrypt, decrypt, sha256 } from "@/lib/secrets";
 import { stripeForStore } from "@/lib/stripe";
+import { connectWhop, disconnectWhop } from "@/lib/whop-connect";
 import { connectStripe, disconnectStripe, registerDomains } from "@/lib/stripe-connect";
 import { sendDelivery } from "@/lib/email";
 import { uploadImage } from "@/lib/media";
@@ -270,6 +271,49 @@ export function registerWriteTools(server: McpServer) {
       if (!data) throw new UserError(`Store "${s.slug}" has no own Stripe account connected.`);
       await disconnectStripe(s.id);
       return { disconnected: data.account_id };
+    },
+  });
+
+  defineTool(server, "connect_whop", {
+    title: "Connect Whop account",
+    kind: "write",
+    external: true,
+    description:
+      "Connect a store to its Whop account and switch the store to charge with Whop. Needs the account API key and the biz_ account id. " +
+      "webhook_secret (ws_...) is what makes delivery work: without it every paid webhook is rejected and NOTHING is delivered — Whop only shows that secret once, when the webhook is created, so paste it here. " +
+      "The key is validated against the account before anything is stored, and it is encrypted at rest. Sets stores.gateway to 'whop'.",
+    input: z.object({
+      store: storeArg,
+      api_key: z.string().min(20, "The account API key"),
+      company_id: z.string().regex(/^biz_[A-Za-z0-9]+$/, "Account id starting with biz_"),
+      webhook_secret: z.string().regex(/^ws_[A-Za-z0-9_-]+$/, "Signing secret starting with ws_").optional(),
+      webhook_id: z.string().optional(),
+    }),
+    handler: async ({ store, api_key, company_id, webhook_secret, webhook_id }) => {
+      const s = await getStore(store);
+      try {
+        return await connectWhop(s.id, api_key, company_id, webhook_secret ?? null, webhook_id ?? null);
+      } catch (e) {
+        throw new UserError((e as Error).message);
+      }
+    },
+  });
+
+  defineTool(server, "disconnect_whop", {
+    title: "Disconnect Whop account",
+    kind: "destructive",
+    external: true,
+    description:
+      "DESTRUCTIVE. Remove a store's Whop connection and switch the store back to Stripe. The checkout cannot charge with Whop afterwards. " +
+      "Does NOT delete the webhook inside Whop: do that in Whop itself, or it will keep posting to an endpoint that no longer has its secret.",
+    input: z.object({ store: storeArg, confirm: confirmArg }),
+    handler: async ({ store }) => {
+      const s = await getStore(store);
+      try {
+        return await disconnectWhop(s.id);
+      } catch (e) {
+        throw new UserError((e as Error).message);
+      }
     },
   });
 

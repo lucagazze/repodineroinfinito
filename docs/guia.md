@@ -1,7 +1,7 @@
 # Empezar
 
 ## Qué es esta app y cómo leer esta guía {#empezar}
-Esta app es una plataforma de checkout propia para vender productos digitales (por ejemplo, libros en PDF): checkout con Stripe, post-pago de 1 clic, entrega por mail, panel con ventas y métricas, y un piloto de pujas para Meta Ads.
+Esta app es una plataforma de checkout propia para vender productos digitales (por ejemplo, libros en PDF): checkout con Stripe **o Whop** (cada tienda elige), post-pago de 1 clic, entrega por mail, panel con ventas y métricas, y un piloto de pujas para Meta Ads.
 
 Esta guía es el centro de información: qué es cada sección, cómo se carga cada cosa y qué reglas de seguridad sigue la app. Sirve igual para una persona que para una IA.
 
@@ -10,7 +10,7 @@ Esta guía es el centro de información: qué es cada sección, cómo se carga c
 - Si algo de la guía no coincide con lo que ves en la app, manda la app; avisa al responsable para corregir la guía.
 
 ### Al empezar cada sesión: revisar lo pendiente
-1. `catalog_status` (con `refresh: true` si tiene más de una hora): catálogos y cuentas de Stripe. Trae `fix_prompt` con qué hacer en cada caso. Lo que se cambia en el panel de Stripe (descripción, sitio web, soporte, descriptor) lo hace a mano el dueño de la cuenta: se le entrega la lista con el texto exacto.
+1. `catalog_status` (con `refresh: true` si tiene más de una hora): catálogos y cuentas de la pasarela (Stripe o Whop). Trae `fix_prompt` con qué hacer en cada caso. Lo que se cambia en el panel de Stripe (descripción, sitio web, soporte, descriptor) lo hace a mano el dueño de la cuenta: se le entrega la lista con el texto exacto.
 2. `list_alerts`: avisos abiertos (entregas, rebotes, contenido pendiente, post-pagos vacíos).
 3. Contenido pendiente: los productos vendidos en preventa que todavía hay que terminar.
 En el Inicio, la tarjeta **«Para hacer»** junta todo eso con su número.
@@ -50,7 +50,7 @@ Lo que más rompe una venta: un link de entrega sin compartir públicamente, un 
 # Conceptos
 
 ## Tiendas, ofertas, mercados y productos {#conceptos}
-**Tienda** = una marca, con su propia cuenta de Stripe, dominio y remitente de mails. Se identifica por `slug` (por ejemplo `mitienda`). Conviene tener además una tienda de pruebas con Stripe en modo test.
+**Tienda** = una marca, con su propia **pasarela de cobro** (Stripe o Whop), dominio y remitente de mails. Se identifica por `slug` (por ejemplo `mitienda`). Conviene tener además una tienda de pruebas con Stripe en modo test.
 
 **Oferta** = la unidad de negocio, por ejemplo «Mi Oferta España»: un producto principal + bonus gratis + order bumps + post-pago por niveles + landing + píxel + campañas. Las ofertas del mismo tema en varios países comparten **categoría**: así se agrupan en el selector del panel.
 
@@ -64,6 +64,29 @@ Lo que más rompe una venta: un link de entrega sin compartir públicamente, un 
 Un pack lleva `includes` con los slugs que trae. Si dos productos son el MISMO archivo, el segundo lleva `variant_of` = el primero (así nunca se le vende a alguien lo que ya tiene).
 
 **Precios**: cada producto tiene `prices` por moneda. La app cobra en la moneda del comprador, convertida desde los precios cargados cuando ese mercado no tiene precio propio. Todo monto en la app va en unidades MAYORES (19.90 = 19,90 €, nunca céntimos).
+
+## Con qué cobra cada tienda {#pasarela}
+
+La app cobra con **Stripe** o con **Whop**, y lo decide cada tienda en
+`stores.gateway`. **No se adivina por qué conexión existe**: durante una
+migración las dos conviven, y adivinar haría cobrar con la que se conectó
+último. El checkout monta una sola.
+
+| | Stripe | Whop |
+|---|---|---|
+| Quién vende ante el banco | tu tienda | **Whop** (comerciante de registro) |
+| Razón social y descriptor | los tuyos | los de Whop |
+| Catálogo para revisión | lo revisa Stripe | lo revisa Whop sobre su cuenta |
+| Conectar | `connect_stripe` | `connect_whop` |
+
+**Lo único que no se puede perder con Whop:** el secreto de firma del webhook
+(`ws_...`). Whop lo muestra **una sola vez**, al crear el webhook. Sin él, cada
+pago cobrado se rechaza y **no se entrega nada** — y no falla de forma visible:
+el dinero entra, el comprador espera, y el panel no muestra la venta. Si se
+perdió, se rehace el webhook en Whop y se vuelve a conectar pegando el nuevo.
+
+`diagnose_store` y `catalog_status` revisan la pasarela que la tienda usa de
+verdad, así que en una tienda de Whop no piden nada de Stripe.
 
 ## Píxeles de Meta {#pixeles}
 **Un píxel por oferta (o por tema)** ayuda a que Meta aprenda de ese público y no se mezcle la atribución. **Un solo píxel por landing y por checkout**: dos píxeles en la misma página inflan las compras.
@@ -194,8 +217,8 @@ Cada oferta tiene una sección **Ads** en el panel para guardar sus creativos y 
 - **Selector de oferta** (menú izquierdo): «Todas las ofertas» o una sola, ordenadas por **A-Z** o **Recientes**. Las ofertas de varios países se agrupan por categoría.
 
 ## Inicio {#panel-inicio}
-- **Objetivo del mes**: la barra de facturación neta del mes (cobrado en Stripe − comisiones − reembolsos) hacia la meta configurada, con la proyección a fin de mes y cuánto falta por día.
-- **Fila de dinero**: Facturado = lo cobrado en Stripe (con bumps y OTO), con «N compras · ticket medio» (compras agrupadas por comprador en 1 hora); Gasto = lo que informa Meta; y lo que queda.
+- **Objetivo del mes**: la barra de facturación neta del mes (cobrado en la pasarela − comisiones − reembolsos) hacia la meta configurada, con la proyección a fin de mes y cuánto falta por día.
+- **Fila de dinero**: Facturado = lo cobrado en la pasarela (con bumps y OTO), con «N compras · ticket medio» (compras agrupadas por comprador en 1 hora); Gasto = lo que informa Meta; y lo que queda.
 - **Ofertas en Meta + anotador**: una fila por oferta con campañas, ordenada por ROAS de 7 días (toca un título para ordenar por otra columna), con beneficio. Al abrirla: sus campañas, **sugerencias** sacadas de los números (pierde dinero, viene cayendo, creativos cansados, escalar, no gasta hoy) con «+ anotar», y las tareas de esa oferta.
 - **Diagnóstico de ofertas**: qué le falta a cada oferta con campañas activas.
 - **Tabla de campañas**: interruptor, y **Presupuesto** (diario) y **Puja** editables: se toca el número, se escribe el nuevo y se confirma; va a Meta al instante y queda en el historial del piloto.
@@ -204,10 +227,10 @@ Cada oferta tiene una sección **Ads** en el panel para guardar sus creativos y 
 Quién está ahora en las landings, checkouts y post-pagos, y el recorrido de cada visita. El mapa se puede acercar (+ / −, doble clic, arrastrar) para ver desde dónde se conecta cada uno.
 
 ## Métricas {#panel-metricas}
-El resultado real: cobrado en Stripe − comisiones reales − reembolsos − gasto en Meta, por día y con el historial completo. Abajo, lo que informa Meta de toda la cuenta.
+El resultado real: cobrado en la pasarela − comisiones reales − reembolsos − gasto en Meta, por día y con el historial completo. Abajo, lo que informa Meta de toda la cuenta.
 
 ## Ventas realizadas y Clientes {#panel-ventas}
-Todas las ventas y todos los clientes de todas las tiendas: se ordenan por cualquier columna, se filtran y se exportan a CSV o Excel (una fila por cobro de Stripe: el del checkout con principal + bumps, y cada OTO aparte; total, moneda, medio de pago, UTM y productos). Ciudad y provincia salen del cobro en Stripe: si el comprador no las cargó, quedan vacías. Dentro de una oferta, «Pedidos» y «Clientes» muestran solo los de esa oferta. Cada pedido abre su detalle (productos, OTO, mails, entrega).
+Todas las ventas y todos los clientes de todas las tiendas: se ordenan por cualquier columna, se filtran y se exportan a CSV o Excel (una fila por cobro de la pasarele: el del checkout con principal + bumps, y cada OTO aparte; total, moneda, medio de pago, UTM y productos). Ciudad y provincia salen del cobro en Stripe: si el comprador no las cargó, quedan vacías. Dentro de una oferta, «Pedidos» y «Clientes» muestran solo los de esa oferta. Cada pedido abre su detalle (productos, OTO, mails, entrega).
 
 **Informe de actividad (para disputas / contracargos):** en cada pedido, botón «Informe de actividad (PDF)». Reúne en inglés todo lo registrado de esa compra: IP y dispositivo del pago, ubicación, cada cobro de Stripe (tarjeta, CVC, dirección, 3D Secure, riesgo, disputa), los mails con cada apertura y clic, descargas, las páginas vistas en las 72 h previas, los OTO mostrados/aceptados/rechazados, otras compras de la misma persona (mismo mail o misma IP), coincidencias y conclusión. Se adjunta en la disputa de Stripe. Por MCP: `order_activity_report`.
 
@@ -256,7 +279,7 @@ Una fila por campaña: interruptor para prender o apagar, pujas, tope, y agrupad
 - **Post-pago**: la cadena de niveles con sus downsells y condiciones.
 - **Métricas**: ventas, conversión del checkout y de cada OTO.
 - **Ads**: los creativos de la oferta (con vista previa) y su carpeta. Si la tarjeta tiene ids de anuncios de Meta, muestra gasto y ROAS.
-- **Configuración**: General (datos de la tienda y mails), Pagos (Stripe) y Dominios.
+- **Configuración**: General (datos de la tienda y mails), Pagos (Stripe o Whop) y Dominios.
 - **Markets**: qué países pagan precio propio y cuáles con conversión.
 - **Archivos**: las imágenes subidas (logo, tapas, sellos).
 - **Compra de prueba**: recorre checkout + post-pago + mail de entrega sin cobrar.
@@ -267,7 +290,7 @@ Una fila por campaña: interruptor para prender o apagar, pujas, tope, y agrupad
 Montos siempre en unidades MAYORES.
 - **Leer**: `get_guide` (esta guía), `catalog_status`, `order_activity_report`, `list_stores`, `list_offers`, `offer_summary`, `list_products`, `get_product`, `list_checkouts`, `get_checkout`, `list_postpurchase`, `simulate_postpurchase`, `list_pixels`, `diagnose_store`, `sales_summary`, `list_orders`, `list_alerts`, `list_ad_creatives`.
 - **Cargar**: `set_catalog_topic`, `upsert_product`, `upload_media`, `create_checkout`, `update_checkout`, `update_checkout_style`, `upsert_offer`, `upsert_postpurchase`, `upsert_pp_step`, `activate_products`, `set_postcompra_html`, `check_delivery_email`, `set_offer_ads_folder`, `upsert_ad_creative`.
-- **Sensibles, solo con aprobación explícita para ese caso**: `refund_order`, `delete_*`, `disconnect_stripe` (piden `confirm=true`), `connect_stripe` (cambia el webhook de la cuenta de Stripe), `resend_delivery` y `send_recovery` (mandan mails reales), `send_reply`.
+- **Sensibles, solo con aprobación explícita para ese caso**: `refund_order`, `delete_*`, `disconnect_stripe` y `disconnect_whop` (piden `confirm=true`), `connect_stripe` / `connect_whop` (cambian el webhook de la cuenta de Stripe), `resend_delivery` y `send_recovery` (mandan mails reales), `send_reply`.
 Todo lo que se escribe queda registrado (`get_mcp_audit_log`).
 
 ## Lo que nunca se hace {#nunca}
