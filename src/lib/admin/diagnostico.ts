@@ -41,7 +41,7 @@ export async function runDiagnostics(slug: string, base: string): Promise<{ stor
     // Cada oferta activa: botón de la landing, precio, bumps, post-pago, downsells, recuperación y grabación.
     offerAuditChecks(s.id).catch((e) => [{ id: "oa-x", status: "warn" as const, title: "No se pudieron revisar las ofertas", detail: (e as Error).message }]),
     stripeHealth(s.id),
-    db.from("products").select("name,delivery_url,delivery_links").eq("store_id", s.id).eq("active", true).in("kind", ["main", "upsell"]),
+    db.from("products").select("name,delivery_url,delivery_links,delivery_file").eq("store_id", s.id).eq("active", true).in("kind", ["main", "upsell"]),
     db.from("orders").select("id,email,delivery_error,created_at", { count: "exact" }).eq("store_id", s.id).eq("status", "paid")
       .is("delivered_at", null).lt("created_at", tenMin).order("created_at", { ascending: false }).limit(3),
     db.from("stripe_events").select("type,error,received_at", { count: "exact" }).eq("store_id", s.id).not("error", "is", null)
@@ -54,8 +54,25 @@ export async function runDiagnostics(slug: string, base: string): Promise<{ stor
 
   const checks: DiagCheck[] = [];
 
-  // ---- Stripe
-  if (!health.connected) {
+  // ---- Pasarela
+  // Con Whop no se revisa Stripe. Decir "Stripe sin conectar: esta tienda cobra
+  // con la llave general del servidor" sobre una tienda que cobra con Whop, y
+  // que tiene una venta real cobrada y entregada, es una alarma falsa en rojo
+  // sobre lo unico que no hay que dudar: si la tienda cobra.
+  const whop = (s.gateway ?? "stripe") === "whop";
+  if (whop) {
+    const { data: w } = await db.from("store_whop")
+      .select("company_id,webhook_secret_enc,last_event_at").eq("store_id", s.id).maybeSingle();
+    checks.push(
+      !w?.company_id
+        ? { id: "pasarela", status: "bad", title: "Whop sin conectar",
+            detail: "El checkout de esta tienda no puede cobrar.", href: `${cfg}/pagos`, fix: "Ver" }
+        : !w.webhook_secret_enc
+          ? { id: "pasarela", status: "bad", title: "El webhook de Whop no tiene secreto de firma",
+              detail: "Se cobra y no se entrega nada: hay que rehacerlo guardando su ws_.", href: `${cfg}/pagos`, fix: "Ver" }
+          : { id: "pasarela", status: "ok", title: "Whop conectado y con el webhook firmado",
+              detail: w.last_event_at ? `Último evento recibido: ${w.last_event_at}` : w.company_id });
+  } else if (!health.connected) {
     checks.push({ id: "stripe", status: "bad", title: "Stripe sin conectar",
       detail: "Esta tienda cobra con la llave general del servidor, no con su propia cuenta.", href: `${cfg}/pagos`, fix: "Ver" });
   } else if (health.error) {
@@ -95,7 +112,10 @@ export async function runDiagnostics(slug: string, base: string): Promise<{ stor
 
   // ---- Entregas
   const noLink = (products.data ?? []).filter((p) =>
-    !p.delivery_url && !((p.delivery_links as { url?: string }[] | null) ?? []).some((l) => l?.url));
+    // delivery_file cuenta: un PDF o una planilla en el bucket privado es la
+    // entrega MAS segura, no la ausencia de una. Sin esto el diagnostico decia
+    // "3 productos activos sin link de entrega" sobre los tres que entregan.
+    !p.delivery_url && !p.delivery_file && !((p.delivery_links as { url?: string }[] | null) ?? []).some((l) => l?.url));
   checks.push(noLink.length
     ? { id: "links", status: "bad", title: `${plural(noLink.length, "producto activo", "productos activos")} sin link de entrega`,
         detail: noLink.slice(0, 4).map((p) => p.name).join(" · "), href: `${base}/productos`, fix: "Ver" }

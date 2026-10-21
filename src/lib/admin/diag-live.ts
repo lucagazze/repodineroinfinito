@@ -198,14 +198,23 @@ async function pageChecks(storeId: string, offers: Awaited<ReturnType<typeof off
     if (f.landing_url) rows.push({ offer: o.name, what: `la landing${m}`, url: f.landing_url, wallet: false });
     rows.push({ offer: o.name, what: `el checkout${m}`, url: checkoutUrl(f, o.store.slug), wallet: true });
   }
-  const [wallet, ...https] = await Promise.all([checkWallet(storeId), ...rows.map((r) => checkHttp(r.url))]);
+  // Apple Pay / Google Pay se registran POR DOMINIO EN STRIPE. Con Whop los
+  // botones los pone Whop en su propio formulario y la tienda no registra nada,
+  // asi que preguntarle a Stripe devolvia "no hay Stripe conectado" y salia como
+  // un problema del checkout cuando no lo es.
+  const { data: st } = await db.from("stores").select("gateway").eq("id", storeId).maybeSingle();
+  const conStripe = ((st?.gateway as string | null) ?? "stripe") !== "whop";
+  const [wallet, ...https] = await Promise.all([
+    conStripe ? checkWallet(storeId) : Promise.resolve({ ok: true, domains: [], error: "" }),
+    ...rows.map((r) => checkHttp(r.url)),
+  ]);
   const out: DiagCheck[] = [];
   rows.forEach((r, i) => {
     const h = https[i];
     out.push(h.ok
       ? { id: `http-${r.url}`, status: "ok", title: `${r.offer}: ${r.what} responde`, detail: `${r.url.replace(/^https:\/\//, "")} · ${h.status} en ${h.ms} ms` }
       : { id: `http-${r.url}`, status: "bad", title: `${r.offer}: ${r.what} no responde bien`, detail: `${r.url.replace(/^https:\/\//, "")} · ${h.status ?? h.error}. Revisá el dominio y el deploy.`, href: `${cfg}/dominios`, fix: "Dominios" });
-    if (r.wallet) {
+    if (r.wallet && conStripe) {
       const host = hostOf(r.url);
       const d = wallet.domains.find((x) => x.host === host);
       out.push(!wallet.ok

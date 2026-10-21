@@ -31,6 +31,9 @@ export type AdminStore = {
   support_email: string; default_locale: string; guarantee_days: number; timezone: string; active: boolean;
   logo_url: string | null; email_from: string | null; legal_name: string | null; legal_address: string | null;
   statement_descriptor: string | null; meta_pixel_id: string | null; meta_ad_account_id: string | null; sales_webhook_url: string | null;
+  /** "stripe" | "whop": con que cobra la tienda. Lo lee select("*"), pero
+   *  sin declararlo aca el panel lo ve como undefined y asume Stripe. */
+  gateway: string | null;
   brand: Brand; business: Business; thankyou: Thankyou; delivery_email: DeliveryEmail; created_at: string;
 };
 

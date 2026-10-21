@@ -98,6 +98,20 @@ export async function pilotSettings() {
   const pct = Number(v.ceiling_pct);
   return { enabled: v.enabled !== false, ceilingPct: pct >= 30 && pct <= 100 ? pct : Math.round(CEILING_FACTOR * 100) };
 }
+/**
+ * Los ids de campania vinculados a algun embudo de esta app.
+ *
+ * Es la unica definicion de «campania propia» que el piloto puede usar sin
+ * equivocarse: una cuenta publicitaria puede tener campanias de otra marca que
+ * esta app ni ve. Vacio = el piloto no toca nada, que es el default seguro.
+ */
+export async function campaignIdsLinked(): Promise<Set<string>> {
+  const { data } = await db.from("funnels").select("meta_campaign_ids").not("meta_campaign_ids", "is", null);
+  const out = new Set<string>();
+  for (const f of data ?? []) for (const id of (f.meta_campaign_ids as string[] | null) ?? []) if (id) out.add(id);
+  return out;
+}
+
 export async function pilotEnabled() {
   return (await pilotSettings()).enabled;
 }
@@ -147,7 +161,16 @@ export async function runPilot(opts: { dryRun?: boolean } = {}): Promise<PilotRu
       const campaigns = await allPages(camps, 5);
       const adsets = await allPages(sets, 5);
       const campOf = new Map(campaigns.map((c) => [c.id, c]));
+      // SOLO las campanias que esta app sabe que son suyas
+      // (funnels.meta_campaign_ids). El filtro de antes miraba unicamente la
+      // estrategia de puja, asi que en una cuenta publicitaria COMPARTIDA entre
+      // dos marcas el piloto se auto-inscribia las campanias de la otra y les
+      // movia la puja con datos que no eran de ellas. La cuenta de Finance
+      // Study Lab es la misma que la de Physics Study Lab, que no vive en esta
+      // app: sus ventas no se ven desde aca y sus campanias no se tocan.
+      const propias = await campaignIdsLinked();
       const mine = adsets.filter((s) => {
+        if (!propias.has(s.campaign_id)) return false;
         const c = campOf.get(s.campaign_id);
         return (c?.bid_strategy === BID_CAP || s.bid_strategy === BID_CAP) && s.bid_amount != null;
       });
