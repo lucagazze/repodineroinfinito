@@ -131,6 +131,20 @@ body{background:#f4f7fd}
 .ty .sum div{display:flex;justify-content:space-between;gap:12px;padding:3px 0}
 .ty .sum div span:last-child{white-space:nowrap}
 .ty .sum .tot{margin-top:6px;padding-top:8px;border-top:1px solid var(--border);font-weight:800}
+/* «Y ahora qué». Mismo ancho y mismo radio que el resto de la página: es una
+   sección más de la entrega, no un anuncio pegado al final. Se separa del
+   bloque de descargas con un filete, no con un color: lo que vende tiene que
+   verse claramente después de lo que ya se pagó. */
+.ty .next{margin:22px 14px 0;padding-top:18px;border-top:1px solid var(--border);display:grid;gap:12px}
+.ty .nx{padding:16px 18px;border:1px solid var(--border);border-radius:16px;background:#fff;box-shadow:var(--shadow)}
+.ty .nk{font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--text-light)}
+.ty .nx h2{margin:6px 0 0;font-size:16.5px;line-height:1.3;font-weight:700;color:var(--text)}
+.ty .nx p{margin:8px 0 0;font-size:14px;line-height:1.55;color:var(--text-light);white-space:pre-line}
+.ty .nx ul{margin:10px 0 0;padding-left:18px;font-size:14px;line-height:1.5;color:var(--text-light)}
+.ty .nx li{margin:3px 0}
+.ty .nl{display:inline-block;margin-top:12px;font-size:14px;font-weight:600;color:var(--primary-dark);text-decoration:none}
+.ty .nl:hover{text-decoration:underline}
+.ty .nn{margin-top:12px;padding-top:10px;border-top:1px solid var(--border);font-size:12.5px;color:var(--text-light)}
 .ty .spam{margin:14px 14px 0;padding:13px 16px;border-radius:12px;background:var(--primary-light);color:var(--primary-dark);font-size:13.5px;text-align:center}
 .ty .foot{padding:24px 18px 32px;text-align:center;font-size:13px;color:var(--text-light)}
 .ty .foot a{color:var(--primary);font-weight:700;overflow-wrap:anywhere}
@@ -151,6 +165,9 @@ export function ThankYouView(p: {
   included: string[];
   summary: { title: string; rows: { name: string; amount: string }[]; totalLabel: string; total: string } | null;
   showSpam: boolean;
+  /** «Y ahora qué»: lo que sigue después de la descarga. Vacío = no se dibuja nada. */
+  next?: { kicker?: string; title: string; body?: string; bullets?: string[];
+           note?: string; link?: { label: string; url: string } }[];
   guaranteeDays: number;
   preview?: { detail?: string };
   /** Pedido real: los clics en «Descargar» se registran (site_events). */
@@ -224,6 +241,31 @@ export function ThankYouView(p: {
             <b>{p.summary.title}</b>
             {p.summary.rows.map((r, i) => <div key={i}><span>{r.name}</span><span>{r.amount}</span></div>)}
             <div className="tot"><span>{p.summary.totalLabel}</span><span>{p.summary.total}</span></div>
+          </section>
+        )}
+
+        {/* Lo que sigue. Va DESPUES de las descargas a proposito: el comprador
+            vino a buscar sus archivos, y una pagina que le pone otra cosa
+            delante del boton que vino a apretar se lee como un embudo, no como
+            una entrega. Una vez que tiene lo suyo, esto es bienvenido. */}
+        {(p.next ?? []).length > 0 && (
+          <section className="next">
+            {(p.next ?? []).map((b, i) => (
+              <article className="nx" key={i}>
+                {b.kicker && <div className="nk">{b.kicker}</div>}
+                <h2>{b.title}</h2>
+                {b.body && <p>{b.body}</p>}
+                {b.bullets && b.bullets.length > 0 && (
+                  <ul>{b.bullets.map((x, j) => <li key={j}>{x}</li>)}</ul>
+                )}
+                {b.link && (
+                  <a className="nl" href={b.link.url} target="_blank" rel="noopener noreferrer">
+                    {b.link.label} →
+                  </a>
+                )}
+                {b.note && <p className="nn">{b.note}</p>}
+              </article>
+            ))}
           </section>
         )}
 

@@ -146,7 +146,14 @@ export default async function Simulacion({
   for (const slug of got) { const id = idOf.get(slug); if (id && !kinds.has(id)) kinds.set(id, "upsell"); }
   const products = (await Promise.all([...kinds.keys()].map((id) => getProductById(id)))).filter((p): p is Product => !!p);
   const { items: cards, included } = thankYouItems(products, kinds, null);
-  const ty = (store.thankyou ?? {}) as { title?: string; message?: string; showSpam?: boolean };
+  // `next` va incluido: la simulacion tiene que mostrar lo MISMO que ve el
+  // comprador. Una vista previa que se saltea una seccion es peor que no tener
+  // vista previa, porque se revisa en ella y se publica otra cosa.
+  const ty = (store.thankyou ?? {}) as {
+    title?: string; message?: string; showSpam?: boolean;
+    next?: { kicker?: string; title: string; body?: string; bullets?: string[];
+             note?: string; link?: { label: string; url: string } }[];
+  };
 
   return (
     <ThankYouView
@@ -162,6 +169,7 @@ export default async function Simulacion({
       included={included}
       summary={null}
       showSpam={ty.showSpam !== false}
+      next={ty.next ?? []}
       guaranteeDays={Number(store.guarantee_days ?? 0)}
       preview={{}}
     />

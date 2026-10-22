@@ -23,7 +23,26 @@ export type Business = {
   languages?: string[]; catalog_enabled?: boolean;
 };
 
-export type Thankyou = { title?: string; message?: string; showSummary?: boolean; showSpam?: boolean };
+/**
+ * Un bloque de «y ahora qué» bajo las descargas de la página de gracias.
+ *
+ * Es por tienda y no esta cableado en el componente a proposito: la pagina de
+ * gracias la comparten todas las tiendas, y un bloque de Finance apareciendo
+ * en una compra de Physics seria peor que no tener bloque.
+ */
+export type ThankyouNext = {
+  kicker?: string;      // la linea chica de arriba
+  title: string;        // el titular del bloque
+  body?: string;        // el cuerpo; respeta los saltos de linea
+  bullets?: string[];   // lista corta, opcional
+  note?: string;        // la letra chica: la promesa, la condicion
+  link?: { label: string; url: string };
+};
+
+export type Thankyou = {
+  title?: string; message?: string; showSummary?: boolean; showSpam?: boolean;
+  next?: ThankyouNext[];
+};
 export type DeliveryEmail = { subject?: string; welcome?: string; closing?: string; color?: string; headerImage?: string };
 
 export type AdminStore = {

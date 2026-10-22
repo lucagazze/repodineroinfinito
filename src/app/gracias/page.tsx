@@ -48,7 +48,11 @@ async function localeDeTienda(slug: string | undefined): Promise<Locale | null> 
 }
 
 /** Configuración › Entrega › Página de gracias. Vacío = los textos de siempre. */
-type Thankyou = { title?: string; message?: string; showSummary?: boolean; showSpam?: boolean };
+type Thankyou = {
+  title?: string; message?: string; showSummary?: boolean; showSpam?: boolean;
+  next?: { kicker?: string; title: string; body?: string; bullets?: string[];
+           note?: string; link?: { label: string; url: string } }[];
+};
 
 export default async function Gracias({
   searchParams,
@@ -175,6 +179,7 @@ export default async function Gracias({
         included={included}
         summary={ty.showSummary ? { title: S.title, rows, totalLabel: S.total, total: money(total, cur, locale) } : null}
         showSpam={ty.showSpam !== false}
+        next={ty.next ?? []}
         guaranteeDays={Number(store?.guarantee_days ?? 0)}
       />
     </>
