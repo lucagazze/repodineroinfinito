@@ -3,6 +3,7 @@ import { withBrand } from "@/lib/brand";
 import { after } from "next/server";
 import { db } from "@/lib/db";
 import { stripeForStore } from "@/lib/stripe";
+import { conexionDe } from "@/lib/whop";
 import { getRates, priceFor } from "@/lib/fx";
 import { resolveChain, resolveStep, afterAccept, afterDecline } from "@/lib/postpurchase";
 import { orderChargeable, recordUpsell } from "@/lib/upsell";
@@ -36,8 +37,22 @@ export default async function Oferta({
 
   const order = await findOrder(session_id);
   if (!order) redirect("/");
-  const stripeCfg = await stripeForStore(order.store_id);
-  if (!orderChargeable(order.status, stripeCfg.livemode)) redirect("/");
+
+  // Stripe se pide SOLO si hace falta: `stripeForStore` TIRA cuando la tienda
+  // no lo tiene conectado, y una tienda que cobra con Whop no lo tiene. Pedirlo
+  // siempre hacia que la pagina de la oferta respondiera 500 a todos los
+  // compradores de esa tienda -- el post-pago entero, invisible, sin un error
+  // que lo delatara en ningun panel. Medido el 22/10/2026 contra
+  // financestudylab: /gracias daba 200 y /oferta/1 daba 500 para el MISMO
+  // pedido.
+  //
+  // Solo se necesita para dos cosas: el `livemode` que decide si un pedido de
+  // prueba puede "cobrar", y la vuelta de una redireccion de pago, que es un
+  // camino exclusivo de Stripe.
+  const whop = await conexionDe(order.store_id);
+  const stripeCfg = whop ? null : await stripeForStore(order.store_id);
+  const livemode = whop ? whop.livemode : stripeCfg!.livemode;
+  if (!orderChargeable(order.status, livemode)) redirect("/");
 
   const chain = await resolveChain(order);
   const done = `/gracias?session_id=${session_id}&done=1`;
@@ -55,7 +70,7 @@ export default async function Oferta({
   // ¿Volvió de pagar esta oferta con redirección? Se registra acá (el webhook
   // también lo haría) y la pantalla sigue sola al próximo paso.
   let returned: "ok" | "failed" | undefined;
-  if (upsellPi) {
+  if (upsellPi && stripeCfg) {
     const { stripe } = stripeCfg;
     const pi = await stripe.paymentIntents.retrieve(upsellPi).catch(() => null);
     if (pi && pi.metadata?.order === order.id && pi.metadata?.kind === "upsell" && pi.metadata?.product === product.slug) {
@@ -74,7 +89,9 @@ export default async function Oferta({
   const price = priceFor(product, currency, await getRates());
   if (!price?.amount) redirect(stepUrl(afterAccept(chain, idx)));
 
-  const { publishableKey } = stripeCfg;
+  // Con Whop no hay llave publica de Stripe que pasarle al navegador: la hoja
+  // de pago de respaldo es de Stripe y en esa tienda no existe.
+  const publishableKey = stripeCfg?.publishableKey ?? "";
   const [{ data: store }, { data: content }, px, { data: who }] = await Promise.all([
     db.from("stores").select("name,display_name,brand,guarantee_days").eq("id", order.store_id).single(),
     db.from("products").select("postcompra_page,postcompra_html").eq("id", product.id).maybeSingle(),
