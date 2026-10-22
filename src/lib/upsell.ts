@@ -185,8 +185,22 @@ export async function registrarUpsellWhop(
   if (!order) return false;
 
   const { data: prod } = await db
-    .from("products").select("id")
+    .from("products").select("id,postcompra_page")
     .eq("store_id", order.store_id).eq("slug", slug).maybeSingle();
+
+  // Material que viaja CON la oferta sin cobrarse aparte: se declara en
+  // `postcompra_page.incluye` del producto vendido, con los slugs.
+  //
+  // Se usa ese campo y no `products.includes` a proposito: `includes` convierte
+  // al producto en un PACK, y a partir de ahi la biblioteca considera que su
+  // contenido son las partes y no el archivo propio. El Excel dejaria de
+  // entregarse. Esto es otra cosa: el mismo producto, con material al lado.
+  const slugsIncluidos = ((prod?.postcompra_page as { incluye?: unknown } | null)?.incluye ?? []);
+  const { data: incluidos } = Array.isArray(slugsIncluidos) && slugsIncluidos.length
+    ? await db.from("products").select("id,slug")
+        .eq("store_id", order.store_id)
+        .in("slug", slugsIncluidos.filter((s): s is string => typeof s === "string").slice(0, 10))
+    : { data: [] as { id: string; slug: string }[] };
 
   const divisa = cobrado.currency.toUpperCase();
   const { error: insErr } = await db.from("order_items").insert({
@@ -201,6 +215,16 @@ export async function registrarUpsellWhop(
   // el email; acá se sale sin repetirlo.
   if (insErr?.code === "23505") return true;
   if (insErr) { console.error("[upsell whop] order_items:", insErr.message); return false; }
+
+  // Los incluidos entran como renglones de importe cero: asi el pedido dice
+  // exactamente lo que el comprador tiene derecho a bajar, y la pagina de
+  // gracias y la biblioteca los muestran sin ningun caso especial.
+  if (incluidos?.length) {
+    const { error } = await db.from("order_items").insert(incluidos.map((b) => ({
+      order_id: orderId, product_id: b.id, kind: "bonus", amount: 0, currency: divisa,
+    })));
+    if (error && error.code !== "23505") console.error("[upsell whop] incluidos:", error.message);
+  }
 
   later(() => pushUpsell(orderId, {
     amount: cobrado.amount, currency: divisa.toLowerCase(),
@@ -226,7 +250,8 @@ export async function registrarUpsellWhop(
         store: withBrand(store as unknown as Store, (order.locale as string | null) ?? null),
         locale: (order.locale as Locale) ?? DEFAULT_LOCALE,
         main: product,
-        extras: [],
+        extras: (await Promise.all((incluidos ?? []).map((b) => getProductById(b.id))))
+          .filter((p): p is NonNullable<typeof p> => !!p),
         currency: divisa,
         orderRef: orderRef({ id: orderId, number: order.number, status: order.status }),
         total: cobrado.amount,
