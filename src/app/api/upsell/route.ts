@@ -4,7 +4,7 @@ import { stripeForStore } from "@/lib/stripe";
 import { db, getProductById } from "@/lib/db";
 import { getRates, priceFor, toMinor } from "@/lib/fx";
 import { resolveChain } from "@/lib/postpurchase";
-import { orderChargeable, recordUpsell } from "@/lib/upsell";
+import { orderChargeable, recordUpsell, aceptarUpsellDePrueba } from "@/lib/upsell";
 import { cobrarGuardada, conexionDe } from "@/lib/whop";
 
 export const runtime = "nodejs";
@@ -49,6 +49,16 @@ export async function POST(req: NextRequest) {
     .maybeSingle();
 
   if (!order) return NextResponse.json({ error: "Pedido no válido" }, { status: 403 });
+
+  // Compra de PRUEBA del panel: se registra el renglón y no se toca ninguna
+  // pasarela. Antes devolvía 403 y el recorrido se cortaba justo en el paso
+  // que hay que mirar.
+  if (order.status === "test") {
+    const ok = await aceptarUpsellDePrueba(order.id, String(productSlug));
+    return ok
+      ? NextResponse.json({ ok: true, product: productSlug, method: "prueba" })
+      : NextResponse.json({ reason: "declined" }, { status: 409 });
+  }
 
   // Whop va primero: `stripeForStore` tira si la tienda no tiene Stripe, y una
   // tienda que cobra con Whop no lo tiene. Si se consultara igual, el post-pago

@@ -20,6 +20,59 @@ export function orderChargeable(status: string | null | undefined, livemode: boo
 }
 
 /**
+ * ¿Se le pueden MOSTRAR las ofertas a este pedido?
+ *
+ * No es lo mismo que poder cobrarle, y confundirlas costo caro. Con Whop no
+ * existe un modo de prueba: `livemode` es siempre true, asi que
+ * `orderChargeable` daba false para todo pedido de prueba y la pagina de la
+ * oferta redirigia a la raiz. Resultado: en una tienda de Whop la compra de
+ * prueba NO podia recorrer el post-pago, y un 500 en esa pagina sobrevivio sin
+ * que ninguna herramienta lo delatara (22/10/2026, financestudylab).
+ *
+ * Un pedido de prueba tiene que poder VER todo. Cobrarle es otra pregunta, y
+ * la sigue contestando `orderChargeable`.
+ */
+export function orderViewable(status: string | null | undefined) {
+  return status === "paid" || status === "test";
+}
+
+/**
+ * Acepta una oferta en una compra de PRUEBA: registra el renglon y no toca
+ * ninguna pasarela. Sin esto, el boton de una prueba devolvia 403 y el
+ * recorrido se cortaba justo donde hay que mirarlo.
+ *
+ * El guardia es doble a proposito -- el estado del pedido Y el prefijo de su
+ * referencia -- porque lo que esta en juego es entregar un producto sin cobrar.
+ */
+export async function aceptarUpsellDePrueba(orderId: string, productSlug: string) {
+  const { data: o } = await db
+    .from("orders").select("id,status,store_id,currency,stripe_session_id")
+    .eq("id", orderId).maybeSingle();
+  if (!o || o.status !== "test") return false;
+  if (!String(o.stripe_session_id ?? "").startsWith("test_")) return false;
+
+  const { data: prod } = await db
+    .from("products").select("id,slug").eq("store_id", o.store_id).eq("slug", productSlug).maybeSingle();
+  if (!prod) return false;
+
+  const { data: ya } = await db
+    .from("order_items").select("id").eq("order_id", orderId).eq("product_id", prod.id).maybeSingle();
+  if (ya) return true;
+
+  const { data: pr } = await db
+    .from("product_prices").select("amount")
+    .eq("product_id", prod.id).eq("currency", (o.currency ?? "USD").toUpperCase()).maybeSingle();
+
+  const { error } = await db.from("order_items").insert({
+    order_id: orderId, product_id: prod.id, kind: "upsell",
+    amount: Number(pr?.amount ?? 0), currency: (o.currency ?? "USD").toUpperCase(),
+    stripe_payment_intent: `test_${o.stripe_session_id}_${prod.slug}`.slice(0, 120),
+  });
+  if (error && error.code !== "23505") { console.error("[upsell prueba]", error.message); return false; }
+  return true;
+}
+
+/**
  * Registra el upsell a partir del PaymentIntent, no de lo que diga el
  * navegador: el importe y el producto salen de la metadata que puso el
  * servidor al crearlo. Idempotente por PaymentIntent.

@@ -6,7 +6,7 @@ import { stripeForStore } from "@/lib/stripe";
 import { conexionDe } from "@/lib/whop";
 import { getRates, priceFor } from "@/lib/fx";
 import { resolveChain, resolveStep, afterAccept, afterDecline } from "@/lib/postpurchase";
-import { orderChargeable, recordUpsell } from "@/lib/upsell";
+import { orderViewable, recordUpsell } from "@/lib/upsell";
 import { logUpsellEvent } from "@/lib/upsell-events";
 import { findOrder, refOf } from "@/lib/order-lookup";
 import { type Locale, DEFAULT_LOCALE } from "@/lib/i18n";
@@ -52,7 +52,10 @@ export default async function Oferta({
   const whop = await conexionDe(order.store_id);
   const stripeCfg = whop ? null : await stripeForStore(order.store_id);
   const livemode = whop ? whop.livemode : stripeCfg!.livemode;
-  if (!orderChargeable(order.status, livemode)) redirect("/");
+  // VER, no cobrar: un pedido de prueba tiene que poder recorrer estas
+  // mismas paginas -- son las unicas que prueban lo que ve el comprador.
+  if (!orderViewable(order.status)) redirect("/");
+  void livemode;
 
   const chain = await resolveChain(order);
   const done = `/gracias?session_id=${session_id}&done=1`;
