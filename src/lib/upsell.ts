@@ -52,7 +52,8 @@ export async function aceptarUpsellDePrueba(orderId: string, productSlug: string
   if (!String(o.stripe_session_id ?? "").startsWith("test_")) return false;
 
   const { data: prod } = await db
-    .from("products").select("id,slug").eq("store_id", o.store_id).eq("slug", productSlug).maybeSingle();
+    .from("products").select("id,slug,postcompra_page")
+    .eq("store_id", o.store_id).eq("slug", productSlug).maybeSingle();
   if (!prod) return false;
 
   const { data: ya } = await db
@@ -69,6 +70,23 @@ export async function aceptarUpsellDePrueba(orderId: string, productSlug: string
     stripe_payment_intent: `test_${o.stripe_session_id}_${prod.slug}`.slice(0, 120),
   });
   if (error && error.code !== "23505") { console.error("[upsell prueba]", error.message); return false; }
+
+  // El material incluido viaja tambien en la prueba. Si no, la compra de
+  // prueba no puede detectar que el enganche `incluye` se rompio -- y ese es
+  // justamente el tipo de cosa que solo se ve recorriendo el embudo.
+  const incluidos = ((prod.postcompra_page as { incluye?: unknown } | null)?.incluye ?? []);
+  if (Array.isArray(incluidos) && incluidos.length) {
+    const { data: extras } = await db.from("products").select("id")
+      .eq("store_id", o.store_id)
+      .in("slug", incluidos.filter((s): s is string => typeof s === "string").slice(0, 10));
+    if (extras?.length) {
+      const { error: e2 } = await db.from("order_items").insert(extras.map((b) => ({
+        order_id: orderId, product_id: b.id, kind: "bonus",
+        amount: 0, currency: (o.currency ?? "USD").toUpperCase(),
+      })));
+      if (e2 && e2.code !== "23505") console.error("[upsell prueba] incluidos:", e2.message);
+    }
+  }
   return true;
 }
 
