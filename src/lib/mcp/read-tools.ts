@@ -66,6 +66,7 @@ export function productOut(p: ProductRow, variantOf?: string | null) {
     includes: p.includes ?? [],
     presale: !!p.presale,
     presale_days: p.presale_days ?? null,
+    subscription: !!p.subscription,
     postcompra_page: p.postcompra_page ?? null,
     image_url: p.image_url,
     email_image_url: p.email_image_url,
@@ -454,7 +455,16 @@ export function registerReadTools(server: McpServer) {
       if (!(funnels ?? []).some((f) => f.active)) add("warn", "checkouts", "No active checkout.", "create_checkout");
       // delivery_file cuenta: un PDF en el bucket privado es la forma MAS segura de
         // entregar (link firmado de 10 min) y se leia como "sin entrega".
+        //
+        // Y dos cosas NO se entregan con un archivo, por diseno:
+        //   · una SUSCRIPCION, que se entrega como la edicion de cada semana
+        //   · una PREVENTA, cuyo archivo todavia no existe -- es lo que se
+        //     vendio: el libro dentro de N dias
+        // Marcarlas era un aviso encendido para siempre, y un aviso que siempre
+        // esta encendido deja de mirarse: el dia que falte una entrega de
+        // verdad, nadie va a reaccionar.
         const noDelivery = products.filter((p) => p.active && p.kind !== "bonus"
+          && !p.subscription && !p.presale
           && !p.delivery_url && !(p.delivery_links ?? []).length && !p.delivery_file);
       add(noDelivery.length ? "warn" : "ok", "delivery_links", noDelivery.length ? `Active products with nothing to deliver: ${noDelivery.map((p) => p.slug).join(", ")}` : "Every active main/upsell product has something to deliver", "upsert_product delivery_url=https://... or upload a file.");
 

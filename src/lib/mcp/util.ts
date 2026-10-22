@@ -164,6 +164,8 @@ export type ProductRow = {
   includes: string[] | null;
   presale: boolean | null;
   presale_days: number | null;
+  /** Una suscripcion se entrega como la edicion de cada semana, nunca con un archivo. */
+  subscription?: boolean | null;
   /** Contenido de la pagina del OTO. upsert_product promete devolverla. */
   postcompra_page: Record<string, unknown> | null;
   email_image_url: string | null; sort_order: number; active: boolean; show_in_catalog: boolean;
