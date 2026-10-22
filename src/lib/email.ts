@@ -218,7 +218,7 @@ type Mail = {
   subject: string;
   html: string;
   tag: string;
-  kind: "delivery" | "upsell" | "recovery" | "test" | "access";
+  kind: "delivery" | "upsell" | "recovery" | "test" | "access" | "subscription";
   orderId?: string | null;
   /** Dominio público para el píxel y los links con seguimiento. Sin él se usa el del pedido o el de pago de la tienda. */
   trackBase?: string | null;
@@ -370,7 +370,7 @@ export async function sendMail(m: Mail): Promise<SendResult> {
 }
 
 const TRACKED = new Set<Mail["kind"]>(["delivery", "upsell", "recovery"]);
-const KIND_ES: Record<Mail["kind"], string> = { delivery: "de entrega", upsell: "del upsell", recovery: "de recuperación", test: "de prueba", access: "de acceso a la biblioteca" };
+const KIND_ES: Record<Mail["kind"], string> = { delivery: "de entrega", upsell: "del upsell", recovery: "de recuperación", test: "de prueba", access: "de acceso a la biblioteca", subscription: "de la suscripción" };
 const failRef = (m: Mail) => `${m.kind}:${m.orderId ?? m.to.toLowerCase()}`;
 
 async function trackBase(m: Mail): Promise<string | null> {

@@ -3,6 +3,10 @@ import { applyRefund, fulfill } from "@/lib/fulfill";
 import { DEFAULT_LOCALE, pickLocale } from "@/lib/i18n";
 import { aNumero, conexionDe, montoCobrado, verPago, type PagoWhop } from "@/lib/whop";
 import { registrarUpsellWhop } from "@/lib/upsell";
+import {
+  avisarAlta, avisarTarjetaRechazada, membresiaWhop, registrarCobroSuscripcion,
+  registrarFalloSuscripcion,
+} from "@/lib/suscripcion-eventos";
 
 /**
  * Qué hacer con cada evento de Whop.
@@ -192,6 +196,39 @@ export async function manejarEventoWhop(ev: Evento, ctx: { storeId: string }) {
       return { upsell: pago.id, registrado: ok };
     }
 
+    // Una RENOVACION tampoco es un pedido nuevo. Y a diferencia del upsell no
+    // se reconoce por metadata: la renovacion la genera Whop solo, un mes
+    // despues, sin nada nuestro adentro. El unico dato estable es el plan que
+    // se esta cobrando. Sin esta rama, cada mes se crearia un pedido nuevo con
+    // su propio numero y su propio mail de entrega, y el embudo de la venta
+    // original quedaria contando compras que no existieron.
+    if (tipo === "payment.succeeded") {
+      const sus = await registrarCobroSuscripcion(ctx.storeId, pago);
+      if (sus) {
+        // La bienvenida sale una sola vez, en el alta. `creada` lo dice la
+        // base, no el importe ni el evento: un reintento del mismo pago vuelve
+        // con creada=false y no escribe de nuevo.
+        if (sus.creada && typeof sus.id === "string") {
+          await avisarAlta(ctx.storeId, {
+            id: sus.id, email: sus.email, name: pago.user?.name ?? null,
+            producto: sus.producto, importe: sus.importe,
+            currency: (pago.currency ?? "usd") as string, fundador: !!sus.founder,
+          }).catch((e) => console.error("[whop] bienvenida de la suscripcion:", (e as Error).message));
+        }
+        return {
+          suscripcion: pago.id, id: sus.id, alta: !!sus.creada,
+          repetido: !!sus.repetido, pagos: sus.pagos, fundador: !!sus.founder,
+        };
+      }
+    } else {
+      // `payment.pending` de una suscripcion: todavia no entro la plata, asi
+      // que no se cuenta. Se contesta 200 para que Whop no reintente.
+      const { suscripcionDelPlan } = await import("@/lib/suscripcion");
+      if (await suscripcionDelPlan(ctx.storeId, pago.plan?.id)) {
+        return { suscripcion_pendiente: pago.id };
+      }
+    }
+
     const quien = await resolver(ctx.storeId, pago);
     if (!quien) {
       // Se tira error a propósito: Whop reintenta y queda a la vista. Un pago
@@ -201,6 +238,31 @@ export async function manejarEventoWhop(ev: Evento, ctx: { storeId: string }) {
 
     await entregarPagoWhop(pago, quien, tipo === "payment.succeeded");
     return { entregado: pago.id, via: quien.via };
+  }
+
+  // ------------------------------------------------- tarjeta rechazada
+  // El evento que mas plata pierde si no se trata. Whop lo manda y hasta hoy
+  // se contestaba «ignorado»: una tarjeta vencida dejaba de cobrar y nadie se
+  // enteraba -- ni nosotros ni el suscriptor, que es el unico que lo puede
+  // arreglar.
+  if (tipo === "payment.failed") {
+    const pago = (dato.payment ?? dato) as PagoWhop;
+    if (!pago?.id) return { ignorado: "fallo sin id" };
+    const r = await registrarFalloSuscripcion(ctx.storeId, pago);
+    if (!r) return { ignorado: "fallo que no es de una suscripcion" };
+    // El aviso va DESPUES de registrar, y lo que falle en el mail no tira el
+    // webhook: el estado ya quedo bien, y un reintento por un mail que no
+    // salio volveria a contar el fallo.
+    await avisarTarjetaRechazada(ctx.storeId, r).catch((e) =>
+      console.error("[whop] aviso de tarjeta rechazada:", (e as Error).message));
+    return { tarjeta_rechazada: pago.id, ...r, producto: undefined };
+  }
+
+  // ------------------------------------------------------- la membresia
+  // Lo unico que avisa de una baja hecha desde Whop, o de una tarjeta que Whop
+  // ya dio por perdida: ahi no llega ningun pago, llega esto y nada mas.
+  if (tipo === "membership.activated" || tipo === "membership.deactivated" || tipo === "membership.updated") {
+    return membresiaWhop(ctx.storeId, tipo.slice("membership.".length) as never, dato);
   }
 
   // ----------------------------------------------------------- reembolsos

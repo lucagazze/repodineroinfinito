@@ -70,3 +70,11 @@ select cron.schedule('piloto-meta-ads-reintento', '47 12 * * *', $cron$select ne
     headers := jsonb_build_object('Authorization', 'Bearer TU_CRON_SECRET'),
     timeout_milliseconds := 55000
   );$cron$);
+-- Las suscripciones: vence las bajas cumplidas, corta a los morosos pasada la
+-- gracia y reintenta el aviso de tarjeta rechazada. Una vez al dia alcanza:
+-- nada de esto es urgente al minuto, y todo es idempotente.
+select cron.schedule('suscripciones', '20 9 * * *', $cron$select net.http_get(
+    url := 'TU_APP/api/cron/suscripciones',
+    headers := jsonb_build_object('Authorization', 'Bearer TU_CRON_SECRET'),
+    timeout_milliseconds := 55000
+  );$cron$);

@@ -141,6 +141,7 @@ export default async function Shell({ scope, children }: { scope?: string; child
         { href: "/admin/clientes", label: "Clientes", icon: <Users className={ic} /> },
         { href: "/admin/biblioteca", label: "Biblioteca de clientes", icon: <Library className={ic} /> },
         { href: "/admin/carritos", label: "Carritos", icon: <ShoppingCart className={ic} /> },
+        { href: "/admin/suscripciones", label: "Suscripciones", icon: <Repeat className={ic} /> },
         { href: "/admin/preventas", label: "Contenido pendiente", icon: <Package className={ic} />, badge: <Suspense fallback={null}><PresaleBadge /></Suspense> },
         { href: "/admin/mejoras", label: "Mejoras", icon: <Sparkles className={ic} />, badge: <Suspense fallback={null}><MejorasBadge /></Suspense> },
         { href: "/admin/piloto", match: "/admin/piloto", label: "Piloto Meta Ads", icon: <Gauge className={ic} /> },

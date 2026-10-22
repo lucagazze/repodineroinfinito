@@ -93,6 +93,56 @@ def graph(ruta, token, campos=None):
     except Exception as e:
         return False, f"{type(e).__name__}: {e}"
 
+def evento_prueba(token, codigo):
+    """Manda un PageView de prueba al conjunto. Es la unica validacion honesta
+    de un token de Conversions API: prueba ESCRIBIR, que es para lo que sirve.
+
+    user_data NO puede ir casi vacio. La primera version mandaba solo
+    client_user_agent y Meta devolvia "Invalid parameter" a secas: un evento de
+    sitio web necesita al menos un identificador cruzable. Van un mail de prueba
+    hasheado -- el mismo formato que usa la app en produccion-- mas IP y
+    user-agent, que es el trio que Meta espera de un servidor.
+    """
+    import hashlib, time as _t
+    mail = hashlib.sha256(b"prueba@financestudylab.com").hexdigest()
+    cuerpo = urllib.parse.urlencode({
+        "access_token": token,
+        "test_event_code": codigo,
+        "data": json.dumps([{
+            "event_name": "PageView",
+            "event_time": int(_t.time()),
+            "action_source": "website",
+            "event_source_url": "https://pay.financestudylab.com/c/financestudylab/kit",
+            "user_data": {
+                "em": [mail],
+                "client_ip_address": "203.0.113.10",   # TEST-NET-3, no es de nadie
+                "client_user_agent": ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                                      "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Safari/537.36"),
+            },
+        }]),
+    }).encode()
+    req = urllib.request.Request(
+        f"https://graph.facebook.com/{GRAPH}/{PIXEL}/events", data=cuerpo, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=45) as r:
+            return True, json.loads(r.read().decode())
+    except urllib.error.HTTPError as e:
+        # El error COMPLETO: Meta pone el detalle util en error_user_msg o en
+        # error_data, y recortarlo a 220 caracteres escondia justo eso.
+        crudo = e.read().decode(errors="replace")
+        try:
+            err = json.loads(crudo).get("error", {})
+            partes = [f"HTTP {e.code}", err.get("message", "")]
+            for k in ("error_user_title", "error_user_msg", "error_subcode"):
+                if err.get(k): partes.append(f"{k}: {err[k]}")
+            if err.get("error_data"): partes.append(f"error_data: {json.dumps(err['error_data'])}")
+            return False, "\n       ".join(str(x) for x in partes if x)
+        except Exception:
+            return False, f"HTTP {e.code} — {crudo[:600]}"
+    except Exception as e:
+        return False, f"{type(e).__name__}: {e}"
+
+
 # -------------------------------------------------------------------- el token
 print(f"""
   Conectar el pixel de Meta
@@ -121,14 +171,34 @@ if token:
     if not re.fullmatch(r"[A-Za-z0-9_-]{20,600}", token):
         sys.exit("\n  El token tiene caracteres que no van. Copialo de nuevo entero.\n")
     print(f"\n  largo: {len(token)} caracteres{'' if token.startswith('EAA') else '  (OJO: no empieza con EAA)'}")
-    print("  validando contra el pixel de verdad...")
-    # Contra el pixel, no contra /me: /me contesta OK con cualquier token valido,
-    # incluso uno sin permiso sobre ESTE pixel -- justo el caso que rompe.
-    ok, dato = graph(PIXEL, token, "id,name")
+
+    # CODIGO DE PRUEBA: hace falta ANTES de validar, no despues.
+    print("""
+  CODIGO DE PRUEBA
+    En el mismo conjunto, pestania "Probar eventos": sale algo tipo TEST12345.
+    Con el puesto, el evento va SOLO a esa pestania y no cuenta como compra.
+    Se usa para validar el token sin ensuciarte los datos.
+""")
+    codigo = input("  codigo de prueba: ").strip()
+    if not re.fullmatch(r"[A-Za-z0-9]{4,40}", codigo or ""):
+        sys.exit("\n  Hace falta el codigo para validar sin mandar un evento real.\n")
+
+    # La validacion es MANDAR UN EVENTO, no leer el pixel.
+    #
+    # La primera version hacia GET /{pixel}?fields=id,name y Meta devolvia
+    # "(#100) Missing Permission" con un token perfectamente bueno: un token de
+    # Conversions API autoriza a ESCRIBIR eventos en el conjunto, no a LEER sus
+    # metadatos. Son permisos distintos y la prueba estaba mirando el que no es.
+    #
+    # Mandar un TestEvent prueba exactamente la operacion que la app va a hacer
+    # en produccion, y con test_event_code no toca los datos reales.
+    print("  validando: mandando un evento de prueba al conjunto...")
+    ok, dato = evento_prueba(token, codigo)
     if not ok:
         sys.exit(f"\n  Meta lo rechazo: {dato}\n"
-                 "  Suele ser que el token se genero para otro pixel o para otra app.\n")
-    print(f"  OK  el token manda eventos a: {dato.get('name') or dato.get('id')}\n")
+                 "  Suele ser que el token se genero para otro conjunto de datos.\n")
+    print(f"  OK  Meta recibio {dato.get('events_received', '?')} evento(s) de prueba")
+    print(f"      miralo en 'Probar eventos' del conjunto {PIXEL}\n")
     guardar_token = cifrar(token)
 
     # El panel lee el gasto de las campanias con OTRO permiso (ads_read) y por
@@ -152,15 +222,6 @@ if token:
             print("      No es urgente: sin el, el panel no muestra campanias pero todo lo demas anda.\n")
     del token
 
-# ------------------------------------------------------- el codigo de prueba
-print("""  CODIGO DE PRUEBA (opcional pero recomendado la primera vez)
-    En el mismo pixel, pestania "Eventos de prueba": sale algo tipo TEST12345.
-    Mientras este puesto, los eventos de servidor van SOLO a "Eventos de
-    prueba" y no cuentan como compras reales. Sirve para probar sin ensuciar.
-""")
-codigo = input("  codigo de prueba (Enter para saltar): ").strip()
-if codigo and not re.fullmatch(r"[A-Za-z0-9]{4,40}", codigo):
-    sys.exit("\n  Ese codigo no tiene la forma de un test event code.\n")
 
 # ----------------------------------------------------- la cuenta publicitaria
 print("""

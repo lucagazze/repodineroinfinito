@@ -53,6 +53,15 @@ export const SegmentZ = z.object({
   exclude_recent_days: z.number().int().min(0).max(3650).optional().nullable(),
   engaged: z.object({ campaign: uuid, kind: z.enum(["opened", "clicked", "not_opened"]) }).optional().nullable(),
   leads: z.boolean().optional(),
+  /**
+   * El muro de la suscripcion. Lo resuelve mkt_segment_ids contra
+   * subscriptions_activas, que es la UNICA definicion de «tiene acceso» del
+   * sistema: la edicion paga no sale de una lista aparte que hay que acordarse
+   * de mantener al dia.
+   *   active = solo quien tiene acceso hoy  -> la edicion paga
+   *   none   = solo quien no lo tiene       -> a quien se le ofrece
+   */
+  sub: z.enum(["active", "none"]).optional(),
 });
 export type Segment = z.infer<typeof SegmentZ>;
 

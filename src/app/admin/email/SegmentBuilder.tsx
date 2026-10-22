@@ -140,6 +140,18 @@ export default function SegmentBuilder({ value, onChange, opts, disabled }: {
           </div>
         </Row>
       )}
+      <Row title="Suscripción" hint="(el muro del nivel pago)">
+        <select className="ad-in" value={value.sub ?? ""} aria-label="Suscripción"
+          onChange={(e) => set("sub", e.target.value === "" ? undefined : (e.target.value as "active" | "none"))}>
+          <option value="">— no filtrar por suscripción —</option>
+          <option value="active">Solo suscriptores con acceso hoy</option>
+          <option value="none">Solo los que NO están suscritos</option>
+        </select>
+        <p className="mt-1.5 text-[11.5px] text-zinc-500">
+          «Con acceso» incluye a quien se dio de baja pero pagó hasta fin de período, y a
+          quien tiene una tarjeta rechazada mientras se reintenta. Lo resuelve la base, no una lista a mano.
+        </p>
+      </Row>
       <Row title="Leads de carrito (no compraron)">
         <label className="ad-toggle">
           <input type="checkbox" checked={!!value.leads} onChange={(e) => set("leads", e.target.checked)} />
