@@ -5,6 +5,8 @@ import { decrypt, mask } from "@/lib/secrets";
 import { stripeForStore, dashboardUrl } from "@/lib/stripe";
 import { stripeHealth } from "@/lib/stripe-connect";
 import { mailProvider, senderOf } from "@/lib/email";
+import { brevoAccount, senderReady } from "@/lib/mkt/brevo";
+import { mktSettings, storeSender } from "@/lib/mkt/settings";
 import { resolveSettings } from "@/lib/checkout-settings";
 import { afterDecline, eligible, firstPending, orderSteps, resolveLevels, simulate } from "@/lib/postpurchase";
 import { stepLabels } from "@/lib/postpurchase-labels";
@@ -435,6 +437,34 @@ export function registerReadTools(server: McpServer) {
                  : "No mail provider and no store mailbox: delivery emails fail.",
           "set_store_smtp with the store's mailbox, or set POSTMARK_TOKEN / BREVO_API_KEY.");
       add(s.email_from ? "ok" : "warn", "email_from", s.email_from ? `Sender ${s.email_from}` : `No store sender: emails go out from ${senderOf(s as unknown as Store).email}.`, "update_store email_from with an address on a domain verified in the mail provider.");
+      // EL CAMINO DE LA CARTA SEMANAL, que es otro que el de las entregas.
+      // Las entregas salen por la casilla de la tienda; las campanas, SIEMPRE
+      // por Brevo y desde un subdominio propio (una queja de spam de la carta
+      // no puede tocar la reputacion de la casilla que entrega lo que se pago).
+      // Hasta hoy esto solo se veia en la pantalla de Ajustes del panel, que
+      // esta detras del login: si faltaba la clave, se descubria el domingo.
+      {
+        const [cuenta, remitente, ajustes] = await Promise.all([
+          brevoAccount(), storeSender({ id: s.id, support_email: s.support_email }), mktSettings(),
+        ]);
+        if (cuenta.error) {
+          add("warn", "marketing_brevo", `Brevo unreachable: ${cuenta.error}`,
+              "Set BREVO_API_KEY in the app project on Vercel and redeploy. Campaigns cannot be sent without it.");
+        } else {
+          const sinCreditos = cuenta.credits === 0;
+          add(sinCreditos ? "error" : "ok", "marketing_brevo",
+              `Brevo plan ${cuenta.plan}, ${cuenta.credits ?? "?"} ${cuenta.creditsType ?? "credits"}${sinCreditos ? " — the API accepts the email and does NOT send it" : ""}`,
+              sinCreditos ? "Top up or wait for the daily quota to reset." : "");
+          const porQue = await senderReady(remitente.from);
+          add(porQue ? "warn" : "ok", "marketing_sender",
+              porQue ? `Marketing sender ${remitente.from}: ${porQue}` : `Marketing sender ${remitente.from}, domain authenticated`,
+              "Authenticate the domain in Brevo (Senders, Domains & Dedicated IPs) and load it with the panel's Ajustes screen.");
+        }
+        add(ajustes.enabled ? "ok" : "warn", "marketing_switch",
+            ajustes.enabled ? `Campaign sending ON, cap ${ajustes.daily_cap}/day` : "Campaign sending is OFF: campaigns queue and nothing goes out.",
+            "Panel > Email marketing > Ajustes.");
+      }
+
       add(mailFails?.length ? "warn" : "ok", "email_failures_7d", mailFails?.length ? `${mailFails.length} failed emails in 7 days, latest: ${mailFails[0].error}` : "No failed emails in 7 days", "get_email_log status=failed for details.");
 
       // Checkouts y productos
