@@ -18,3 +18,6 @@ next-env.d.ts
 # clave MCP del panel
 .mcp-token
 .vercel-url
+
+# Permisos personales de Claude Code: no se comparten
+.claude/settings.local.json

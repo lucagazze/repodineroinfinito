@@ -123,8 +123,15 @@ def main():
         print(f"\n  Faltan {len(faltan)}. Para crearlos:  python3 planes-upsell.py --crear\n"); return
 
     print(f"\n  Voy a crear {len(faltan)} plan(es) de pago unico en USD y enlazarlos.")
-    if input("  Escribi SI para seguir: ").strip().upper() != "SI":
-        sys.exit("  Cancelado. No se creo nada.")
+    # --si: confirmacion no interactiva, para que lo pueda correr un asistente.
+    # No es un atajo para saltarse el control: el control pasa a ser el permiso
+    # explicito de .claude/settings.local.json, que el dueno escribe una vez y
+    # puede sacar cuando quiera. Sin esa regla, el comando ni siquiera arranca.
+    if "--si" not in sys.argv:
+        if input("  Escribi SI para seguir: ").strip().upper() != "SI":
+            sys.exit("  Cancelado. No se creo nada.")
+    else:
+        print("  (confirmado con --si)")
 
     for p in faltan:
         nuevo = whop(k, "/plans", "POST", {
