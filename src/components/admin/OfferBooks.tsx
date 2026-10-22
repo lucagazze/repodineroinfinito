@@ -7,7 +7,16 @@ import { Pv } from "./Priv";
  * Lo que se ofrece en esta oferta, con el PDF a un toque: el principal, los bonus, los bumps y los
  * OTO del post-pago (sin los downsells: son el mismo PDF), cada uno con su tapa, el PDF y la carpeta.
  */
-type Prod = { id: string; short_name: string | null; name: string; image_url: string | null; presale: boolean | null; delivery_url: string | null; variant_of: string | null };
+/**
+ * `delivery_file` va incluido a proposito. Una tienda puede entregar de dos
+ * formas — carpeta de Drive (`delivery_url`) o archivo propio en Supabase
+ * (`delivery_file`) — y mirando solo la primera este panel marcaba en rojo
+ * «Sin link de entrega» a productos que entregan perfecto. Medido el
+ * 22/10/2026 contra Finance Study Lab: los cinco productos daban rojo y los
+ * cinco archivos descargaban bien. Una alarma falsa en el panel de un dueño
+ * que acaba de lanzar cuesta mas que no tener alarma.
+ */
+type Prod = { id: string; short_name: string | null; name: string; image_url: string | null; presale: boolean | null; delivery_url: string | null; delivery_file: string | null; delivery_file_name: string | null; variant_of: string | null };
 const ROLE: Record<string, string> = { main: "Principal", bonus: "Bonus", included: "Incluido", bump: "Bump", upsell: "Upsell", oto: "Post-pago" };
 const ORDER = ["main", "bonus", "included", "bump", "upsell", "oto"];
 
@@ -24,7 +33,7 @@ export default async function OfferBooks({ sc }: { sc: Scope }) {
   for (const i of items ?? []) if (!role.has(i.product_id as string)) role.set(i.product_id as string, i.role as string);
   for (const s of steps ?? []) if (!role.has(s.product_id as string)) role.set(s.product_id as string, "oto");
   if (!role.size) return null;
-  const { data } = await db.from("products").select("id,short_name,name,image_url,presale,delivery_url,variant_of").in("id", [...role.keys()]);
+  const { data } = await db.from("products").select("id,short_name,name,image_url,presale,delivery_url,delivery_file,delivery_file_name,variant_of").in("id", [...role.keys()]);
   const prods = ((data ?? []) as Prod[]).filter((p) => !(role.get(p.id) === "oto" && p.variant_of))
     .sort((a, b) => ORDER.indexOf(role.get(a.id)!) - ORDER.indexOf(role.get(b.id)!));
   const pdfs = await Promise.all(prods.map((p) => deliveryPdfs(p.delivery_url).catch(() => [])));
@@ -49,7 +58,12 @@ export default async function OfferBooks({ sc }: { sc: Scope }) {
                       className="inline-flex max-w-[180px] items-center gap-1 rounded-md bg-emerald-50 px-1.5 py-0.5 font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-200 hover:bg-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/25">
                       📄 <span className="truncate">{files.length > 1 ? f.title.replace(/\.pdf$/i, "") : "Abrir PDF"}</span>
                     </a>
-                  )) : p.presale
+                  )) : p.delivery_file
+                    ? <span className="inline-flex max-w-[210px] items-center gap-1 rounded-md bg-emerald-50 px-1.5 py-0.5 font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/25"
+                            title={p.delivery_file}>
+                        📄 <span className="truncate">{p.delivery_file_name || p.delivery_file.split("/").pop()}</span>
+                      </span>
+                    : p.presale
                     ? <span className="font-semibold text-amber-600 dark:text-amber-400">En preventa: todavía no hay PDF</span>
                     : <span className="font-semibold text-red-600 dark:text-red-400">{p.delivery_url ? "Sin PDF en la carpeta" : "Sin link de entrega"}</span>}
                   {p.delivery_url && <a href={p.delivery_url} target="_blank" rel="noreferrer" className="font-semibold text-violet-600 hover:underline dark:text-violet-300">Carpeta</a>}

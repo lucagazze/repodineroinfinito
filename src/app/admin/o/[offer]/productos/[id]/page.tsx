@@ -25,7 +25,7 @@ export default async function Producto({ params }: { params: Promise<{ offer: st
   const since = new Date(Date.now() - 90 * 864e5).toISOString();
   const [{ data: p }, { data: items }, { data: mains }, { data: steps }, { data: sold }, rates] = await Promise.all([
     db.from("products")
-      .select("id,slug,name,short_name,description,kind,active,show_in_catalog,image_url,email_image_url,delivery_url,delivery_links,created_at,updated_at,product_prices(currency,amount,compare_at,display_value,stripe_price_id)")
+      .select("id,slug,name,short_name,description,kind,active,show_in_catalog,image_url,email_image_url,delivery_url,delivery_links,delivery_file,delivery_file_name,created_at,updated_at,product_prices(currency,amount,compare_at,display_value,stripe_price_id)")
       .eq("id", id).eq("store_id", store.id).maybeSingle(),
     db.from("funnel_items").select("role,funnels(id,name,slug,active)").eq("product_id", id),
     db.from("funnels").select("id,name,slug,active").eq("main_product_id", id),
@@ -99,6 +99,9 @@ export default async function Producto({ params }: { params: Promise<{ offer: st
               }))} />
             ) : p.kind === "bonus"
               ? <p className="ad-note">Sin link propio: va dentro de la carpeta del producto principal.</p>
+              : p.delivery_file
+              ? <Checks items={[{ status: "ok", title: "Archivo propio",
+                  detail: <span className="break-all">{String(p.delivery_file_name || p.delivery_file)}<br /><span className="ad-note">Se entrega desde la app con un link firmado por compra. No hace falta carpeta.</span></span> }]} />
               : <Checks items={[{ status: "bad", title: "Sin link de entrega", detail: "Quien lo compre no recibe nada. Pedile a Claude que cargue el link." }]} />}
           </div></Card>
 
