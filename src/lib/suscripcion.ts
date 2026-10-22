@@ -210,77 +210,102 @@ function motivoDe(p: PagoWhop): string {
 // ------------------------------------------------------------- la membresia
 
 /**
- * `membership.activated` / `membership.deactivated`.
+ * `membership.activated` / `.deactivated` / `.updated`.
  *
- * Whop manda estos eventos y hasta hoy el webhook los contestaba con
- * «ignorado». El cobro ya lo maneja payment.succeeded, asi que lo que agregan
- * es la BAJA: cuando alguien cancela desde Whop, o cuando Whop da por perdida
- * una tarjeta, no llega ningun pago -- llega esto y nada mas.
+ * LA FORMA DEL EVENTO ESTA MEDIDA, NO SUPUESTA
+ *   Se disparo el evento de prueba de Whop contra produccion el 22/10/2026 y se
+ *   guardo crudo. Lo que llega, en la RAIZ y sin anidar:
+ *     id, status, plan_id, product_id, user_id, member_id,
+ *     current_period_start, current_period_end, billing_period_days,
+ *     cancel_at_period_end, canceled_at, cancellation_reason, cancel_option,
+ *     renewal_price {amount, currency}, expires_at, manage_url
+ *   NO trae correo: solo `user_id`. Por eso un suscriptor se reconoce por la
+ *   membresia o por el miembro, nunca por el mail, que aqui no existe.
  *
- * La forma del evento no esta medida contra uno real todavia, asi que se guarda
- * crudo y se lee con cuidado. Nunca se da de alta una suscripcion desde aca:
- * un alta sin pago no existe.
+ * Lo que estos eventos aportan y el cobro no:
+ *   - la BAJA hecha desde Whop, donde no llega ningun pago
+ *   - `current_period_end` de verdad, en vez de sumarle 30 dias al ultimo cobro
+ *   - `cancellation_reason`: por que se fue, que es el dato de retencion
+ *
+ * Nunca se da de alta una suscripcion desde aca: un alta sin pago no existe.
  */
 export async function membresiaWhop(
   storeId: string, tipo: "activated" | "deactivated" | "updated", dato: unknown,
 ) {
   const d = (dato ?? {}) as Record<string, unknown>;
+  // Whop manda la membresia en la raiz; la forma anidada se acepta por si cambia.
   const m = ((d.membership ?? d) as Record<string, unknown>) ?? {};
-  const id = typeof m.id === "string" ? m.id : null;
-  const plan = ((m.plan as { id?: string } | undefined)?.id)
-    ?? (typeof m.plan_id === "string" ? m.plan_id : null);
-  const email = String(
-    m.email ?? m.customer_email ?? (m.user as { email?: string } | undefined)?.email ?? "",
-  ).trim().toLowerCase();
+  const txt = (v: unknown) => (typeof v === "string" && v ? v : null);
+
+  const id = txt(m.id);
+  const plan = txt(m.plan_id) ?? txt((m.plan as { id?: string } | undefined)?.id);
+  const miembro = txt(m.member_id) ?? txt((m.member as { id?: string } | undefined)?.id);
+  const hasta = txt(m.current_period_end) ?? txt(m.expires_at);
+  const dias = Number(m.billing_period_days) || null;
+  const precio = aNumero(m.renewal_price as never);
+  const motivo = txt(m.cancellation_reason) ?? txt(m.cancel_option);
+  const estado = txt(m.status);
 
   const quien = await suscripcionDelPlan(storeId, plan);
-  // No es de la suscripcion (o no se pudo leer el plan): se registra para poder
-  // mirarlo, pero no se toca ninguna suscripcion.
   if (!quien) {
+    // No es de la suscripcion, o no se pudo leer el plan. Se registra crudo
+    // para poder mirarlo, y no se toca ninguna suscripcion.
     await db.from("subscription_events").insert({
-      store_id: storeId, email: email || null, kind: "desconocido",
-      whop_membership_id: id, detail: `membership.${tipo} sin plan reconocido`,
-      raw: dato as never,
+      store_id: storeId, kind: "desconocido", whop_membership_id: id,
+      detail: `membership.${tipo} sin plan reconocido`, raw: dato as never,
     });
     return { ignorado: `membership.${tipo}` };
   }
 
-  const { data: sub } = await db
-    .from("subscriptions").select("id,email,status,current_period_end")
-    .eq("store_id", storeId)
-    .or([id ? `whop_membership_id.eq.${id}` : "", email ? `email.eq.${email}` : ""]
-        .filter(Boolean).join(","))
-    .limit(1).maybeSingle();
+  // Por la membresia o por el miembro: el evento no trae correo.
+  const o = [id ? `whop_membership_id.eq.${id}` : "", miembro ? `whop_member_id.eq.${miembro}` : ""]
+    .filter(Boolean).join(",");
+  const { data: sub } = o
+    ? await db.from("subscriptions").select("id,email,status,current_period_end")
+        .eq("store_id", storeId).or(o).limit(1).maybeSingle()
+    : { data: null };
 
   if (!sub) {
     await db.from("subscription_events").insert({
-      store_id: storeId, email: email || null, kind: "desconocido",
-      whop_membership_id: id, detail: `membership.${tipo} de alguien sin suscripcion en la base`,
+      store_id: storeId, kind: "desconocido", whop_membership_id: id,
+      detail: `membership.${tipo} de una membresia que no esta en la base`,
       raw: dato as never,
     });
     return { ignorado: `membership.${tipo} sin suscripcion` };
   }
 
-  // La membresia queda enlazada en cuanto se la ve, aunque el pago no la
-  // trajera: es lo que permite reconocer la baja despues.
-  if (id) await db.from("subscriptions").update({ whop_membership_id: id }).eq("id", sub.id);
+  // Los datos que Whop sabe mejor que nosotros se guardan siempre: el fin de
+  // periodo real vale mas que sumarle 30 dias al ultimo cobro, y de el depende
+  // hasta cuando entra alguien que se dio de baja.
+  const guardar: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (id) guardar.whop_membership_id = id;
+  if (miembro) guardar.whop_member_id = miembro;
+  if (hasta) guardar.current_period_end = hasta;
+  if (dias) guardar.billing_period_days = dias;
+  if (precio !== null && precio > 0) guardar.amount = precio;
+  await db.from("subscriptions").update(guardar).eq("id", sub.id);
 
   if (tipo === "deactivated") {
-    // Whop dejo de cobrar. El acceso se respeta hasta terminar el periodo
-    // pagado: sub_baja sin `p_ya` deja `canceled`, que la vista sigue viendo.
+    // Whop dejo de cobrar. El acceso se respeta hasta el fin de periodo que
+    // Whop acaba de informar: sub_baja sin `p_ya` deja `canceled`, y la vista
+    // de acceso sigue viendolo mientras ese periodo no venza.
     const { error } = await db.rpc("sub_baja", {
-      p_id: sub.id, p_motivo: "baja informada por Whop (membership.deactivated)", p_ya: false,
+      p_id: sub.id,
+      p_motivo: motivo
+        ? `baja informada por Whop: ${motivo}`
+        : "baja informada por Whop (membership.deactivated)",
+      p_ya: false,
     });
     if (error) throw new Error(`sub_baja: ${error.message}`);
-    return { baja: sub.id, hasta: sub.current_period_end };
+    return { baja: sub.id, hasta: hasta ?? sub.current_period_end, motivo };
   }
 
   await db.from("subscription_events").insert({
     store_id: storeId, subscription_id: sub.id, email: sub.email,
     kind: "desconocido", whop_membership_id: id,
-    detail: `membership.${tipo}`, raw: dato as never,
+    detail: `membership.${tipo}${estado ? ` (${estado})` : ""}`, raw: dato as never,
   });
-  return { visto: `membership.${tipo}`, suscripcion: sub.id };
+  return { visto: `membership.${tipo}`, suscripcion: sub.id, estado, hasta };
 }
 
 // ---------------------------------------------------------------- la baja
