@@ -13,10 +13,35 @@ import { coverImg, thumb } from "./thumb";
 import { AdminGrant, BuyerSearch, Card, CardProvider, LoginForm, LoginToggle, Pages, PayReturn, ShopBrowser, Tabs, TopBar, When, type CardCtx, type CardData, type TopGroup } from "./BibClient";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = {
-  title: "Biblioteca", robots: { index: false, follow: false },
-  icons: { icon: [{ url: "/brand/favicon-32x32.png?v=3", sizes: "32x32" }], apple: [{ url: "/brand/apple-touch-icon.png?v=3", sizes: "180x180" }] },
-};
+
+/**
+ * Pestana del navegador. Estaba fija en «Biblioteca», en espanol, para TODAS
+ * las tiendas: un comprador de Finance Study Lab (producto en ingles, mails en
+ * ingles) veia una pestana en espanol. Ahora sale del mismo idioma que el resto
+ * de la pagina, con el nombre de la tienda, que es lo que ayuda a encontrar la
+ * pestana entre veinte.
+ */
+export async function generateMetadata({ params }: { params: Promise<{ store: string }> }): Promise<Metadata> {
+  const iconos = {
+    icon: [{ url: "/brand/favicon-32x32.png?v=3", sizes: "32x32" }],
+    apple: [{ url: "/brand/apple-touch-icon.png?v=3", sizes: "180x180" }],
+  };
+  const base: Metadata = { robots: { index: false, follow: false }, icons: iconos };
+  try {
+    const { store } = await params;
+    const [{ data: s }, h, c] = await Promise.all([
+      db.from("stores").select("name,display_name,default_locale").eq("slug", store).maybeSingle(),
+      headers(), cookies(),
+    ]);
+    if (!s) return { ...base, title: "Library" };
+    const locale = uiLocale(c.get(LANG_COOKIE)?.value, h.get("accept-language"), s.default_locale as string);
+    const marca = (s.display_name as string | null) || (s.name as string);
+    return { ...base, title: [libTexts(locale).title, marca].filter(Boolean).join(" · ") };
+  } catch {
+    // El titulo no puede tirar la pagina: los errores de metadata no los ataja error.tsx.
+    return { ...base, title: "Library" };
+  }
+}
 
 /**
  * Mi biblioteca.

@@ -25,13 +25,13 @@ export async function POST(req: NextRequest) {
   } catch { /* cuerpo ilegible */ }
 
   const id = leerBaja(token);
-  if (!id) return NextResponse.json({ error: "Enlace inválido" }, { status: 400 });
+  if (!id) return NextResponse.json({ error: "This link isn't valid" }, { status: 400 });
 
   const { data } = await db
     .from("subscriptions")
     .select("id,store_id,email,status,current_period_end,whop_membership_id")
     .eq("id", id).maybeSingle();
-  if (!data) return NextResponse.json({ error: "No encontramos la suscripción" }, { status: 404 });
+  if (!data) return NextResponse.json({ error: "We can't find that subscription" }, { status: 404 });
 
   const sub = data as {
     id: string; store_id: string; email: string; status: string;
@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
     p_ya: false,
   });
   if (error) {
-    return NextResponse.json({ error: "No pudimos registrar la baja" }, { status: 500 });
+    return NextResponse.json({ error: "We couldn't record the cancellation" }, { status: 500 });
   }
 
   // Si Whop quedó cobrando, es un aviso que hay que ver: va a la bitácora con
