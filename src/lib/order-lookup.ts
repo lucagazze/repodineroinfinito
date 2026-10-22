@@ -98,7 +98,16 @@ async function rescatarWhop(ref: string, tiendaSlug?: string | null) {
 
 async function lookup(ref: string) {
   // Los pedidos de Whop se guardan con el prefijo whop: en la misma columna.
-  const col = ref.startsWith("cs_") ? "stripe_session_id" : "stripe_payment_intent";
+  //
+  // Las compras de PRUEBA del panel tambien viven en `stripe_session_id` (no
+  // hay pago, asi que no hay id de pago que guardar). Sin contemplarlas aca,
+  // la referencia `test_...` se buscaba en la columna equivocada y la pantalla
+  // final decia «no encontramos tu pedido» con el pedido creado, las entregas
+  // listas y el upsell ya registrado. Medido el 22/10/2026 sobre
+  // test_DPFUxKJMpPvU: el recorrido entero funcionaba menos la ultima pagina.
+  const col = ref.startsWith("cs_") || ref.startsWith(TEST_PREFIX)
+    ? "stripe_session_id"
+    : "stripe_payment_intent";
   const valor = esWhop(ref) ? WHOP + ref : ref;
   const { data, error } = await db
     .from("orders")

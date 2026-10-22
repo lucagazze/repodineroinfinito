@@ -40,6 +40,17 @@ type DeliveryArgs = {
   orderId?: string;
 };
 
+/**
+ * ¿El link de entrega es una carpeta de Drive?
+ *
+ * El consejo «guarda la carpeta en tu Drive» se mandaba con CUALQUIER
+ * link. Los productos que se entregan con archivo propio (Supabase) abren
+ * una descarga firmada, no una carpeta, y el comprador recibia un consejo
+ * que no puede seguir. Visto el 22/10/2026 en el mail de The Valuation
+ * Sheet, que es un .xlsx.
+ */
+const esDrive = (u: string) => /(^|\.)(drive|docs)\.google\.com/i.test(u);
+
 const esc = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
@@ -144,7 +155,7 @@ ${hero ? `<tr><td align="center" style="padding:26px 0 6px">
 </td></tr>
 
 ${url ? `<tr><td align="center">${button(url, t.mailOpen(a.main.short_name), { big: true, color })}</td></tr>
-<tr><td align="center" style="padding:12px 0 0;font-family:${FONT};font-size:12px;line-height:1.5;color:${MUTED}">${esc(t.mailTip)}</td></tr>` : ""}
+${esDrive(url) ? `<tr><td align="center" style="padding:12px 0 0;font-family:${FONT};font-size:12px;line-height:1.5;color:${MUTED}">${esc(t.mailTip)}</td></tr>` : ""}` : ""}
 
 <tr><td style="padding:30px 0 4px;font-family:${FONT};font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:${MUTED}">${esc(t.mailYourOrder)}</td></tr>
 ${items.map((p) => itemRow(p, t, url || null, color, a.orderId)).join("")}
