@@ -147,7 +147,7 @@ export async function getStore(slug: string): Promise<StoreRow> {
 // guardaba bien y la respuesta decia variant_of: null.
 export const PRODUCT_COLS =
   "id,store_id,slug,name,short_name,description,kind,delivery_url,delivery_links,delivery_file,image_url,email_image_url,sort_order," +
-  "variant_of,includes,presale,presale_days,postcompra_page,active,show_in_catalog,created_at,updated_at," +
+  "variant_of,includes,presale,presale_days,subscription,postcompra_page,active,show_in_catalog,created_at,updated_at," +
   "product_prices(currency,amount,compare_at,display_value)";
 
 export type PriceRow = { currency: string; amount: number | string | null; compare_at: number | string | null; display_value: number | string | null };
