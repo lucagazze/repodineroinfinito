@@ -144,3 +144,113 @@ export async function recordUpsell(
   });
   return true;
 }
+
+/**
+ * El mismo upsell, pero cobrado con Whop.
+ *
+ * Vive aparte de `recordUpsell` en vez de generalizarla porque las dos mitades
+ * NO son simétricas y mezclarlas escondería la diferencia que importa:
+ *
+ *   Stripe  el cobro se confirma en la misma llamada; el navegador ya sabe si
+ *           entró y la página puede mostrar el resultado.
+ *   Whop    `payments.create` contesta con el pago ABIERTO. Lo que entra lo
+ *           dice el webhook `payment.succeeded`, nunca la respuesta. Por eso
+ *           esta función la llama el webhook y no la ruta del botón.
+ *
+ * El importe sale del pago de Whop, no de lo que pidió el navegador. Es
+ * idempotente por pago: `order_items.stripe_payment_intent` guarda el id con
+ * el prefijo `whop:`, igual que la compra principal, y el índice único frena
+ * el segundo intento cuando Whop reintenta el webhook.
+ */
+export async function registrarUpsellWhop(
+  orderId: string,
+  pago: { id: string; metadata?: Record<string, string> | null },
+  cobrado: { amount: number; currency: string; at: Date },
+  opts: { defer?: (task: () => Promise<void>) => void } = {},
+): Promise<boolean> {
+  const defer = opts.defer ?? ((t) => void t());
+  const slug = pago.metadata?.product;
+  if (!slug) return false;
+  const pagoRef = `whop:${pago.id}`;
+
+  const { data: dup } = await db
+    .from("order_items").select("id").eq("stripe_payment_intent", pagoRef).maybeSingle();
+  if (dup) return true;
+
+  const { data: order } = await db
+    .from("orders")
+    .select("number,status,store_id,funnel_id,pp_funnel_id,email,name,phone,country,locale,tracking,funnels(pixel_ids)")
+    .eq("id", orderId)
+    .maybeSingle();
+  if (!order) return false;
+
+  const { data: prod } = await db
+    .from("products").select("id")
+    .eq("store_id", order.store_id).eq("slug", slug).maybeSingle();
+
+  const divisa = cobrado.currency.toUpperCase();
+  const { error: insErr } = await db.from("order_items").insert({
+    order_id: orderId,
+    product_id: prod?.id ?? null,
+    kind: "upsell",
+    amount: cobrado.amount,
+    currency: divisa,
+    stripe_payment_intent: pagoRef,
+  });
+  // 23505: lo registró otro reintento del webhook al mismo tiempo. Ese manda
+  // el email; acá se sale sin repetirlo.
+  if (insErr?.code === "23505") return true;
+  if (insErr) { console.error("[upsell whop] order_items:", insErr.message); return false; }
+
+  later(() => pushUpsell(orderId, {
+    amount: cobrado.amount, currency: divisa.toLowerCase(),
+    productId: prod?.id ?? null, paymentIntent: pagoRef,
+  }));
+  if (prod?.id) {
+    await logUpsellEvent({
+      storeId: order.store_id, orderId, ppFunnelId: order.pp_funnel_id ?? null,
+      productId: prod.id, event: "accept",
+    });
+  }
+
+  // El mail del pago principal ya salió: sin este, lo que compró con un clic
+  // solo existiría en la página de gracias.
+  if (prod?.id && order.email) defer(async () => {
+    const product = await getProductById(prod.id);
+    if (!product) return;
+    const { data: store } = await db.from("stores").select(STORE_COLS).eq("id", order.store_id).single();
+    try {
+      const sent = await sendDelivery({
+        to: order.email!,
+        name: order.name,
+        store: withBrand(store as unknown as Store, (order.locale as string | null) ?? null),
+        locale: (order.locale as Locale) ?? DEFAULT_LOCALE,
+        main: product,
+        extras: [],
+        currency: divisa,
+        orderRef: orderRef({ id: orderId, number: order.number, status: order.status }),
+        total: cobrado.amount,
+        orderId,
+        kind: "upsell",
+      });
+      console.log("[upsell whop] email:", "skipped" in sent ? "SIN PROVEEDOR" : sent.messageId, product.slug);
+    } catch (e) {
+      console.error("[upsell whop] email de entrega falló:", e);
+    }
+    // Para Meta es otra compra, con su propio event_id (el id del pago de Whop).
+    await sendPurchase({
+      storeId: order.store_id,
+      funnelPixelIds: (order.funnels as unknown as { pixel_ids?: string[] } | null)?.pixel_ids,
+      eventId: pagoRef,
+      eventTime: cobrado.at,
+      value: cobrado.amount,
+      currency: divisa,
+      contentIds: [product.slug],
+      orderId,
+      email: order.email, phone: order.phone, name: order.name, country: order.country,
+      tracking: (order.tracking ?? {}) as Record<string, string>,
+    }).catch((e) => console.warn("[upsell whop] capi:", (e as Error).message));
+  });
+
+  return true;
+}

@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { applyRefund, fulfill } from "@/lib/fulfill";
 import { DEFAULT_LOCALE, pickLocale } from "@/lib/i18n";
 import { aNumero, conexionDe, montoCobrado, verPago, type PagoWhop } from "@/lib/whop";
+import { registrarUpsellWhop } from "@/lib/upsell";
 
 /**
  * Qué hacer con cada evento de Whop.
@@ -168,6 +169,28 @@ export async function manejarEventoWhop(ev: Evento, ctx: { storeId: string }) {
   if (tipo === "payment.succeeded" || tipo === "payment.pending") {
     const pago = (dato.payment ?? dato) as PagoWhop;
     if (!pago?.id) return { ignorado: "pago sin id" };
+
+    // Un upsell NO es un pedido nuevo: es un renglón más del pedido que ya
+    // existe. Sin esta rama, el post-pago de 1 clic creaba una segunda orden
+    // con su propio número, su propio mail de entrega y el comprador
+    // apareciendo dos veces en ventas. Se reconoce por la metadata que puso
+    // /api/upsell al cobrar, no por el importe ni por el plan.
+    const meta = (pago.metadata ?? {}) as Record<string, string>;
+    if (meta.kind === "upsell" && meta.order) {
+      if (tipo !== "payment.succeeded") return { pendiente: pago.id };
+      const importe = montoCobrado(pago);
+      if (importe === null) {
+        // Se tira error a proposito: Whop reintenta. Registrar un upsell con
+        // importe inventado ensucia la venta y el ROAS que ve Meta.
+        throw new Error(`upsell ${pago.id} sin importe legible`);
+      }
+      const ok = await registrarUpsellWhop(meta.order, pago, {
+        amount: importe,
+        currency: (pago.currency ?? "usd") as string,
+        at: new Date(),
+      });
+      return { upsell: pago.id, registrado: ok };
+    }
 
     const quien = await resolver(ctx.storeId, pago);
     if (!quien) {

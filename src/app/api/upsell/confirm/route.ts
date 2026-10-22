@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse, after } from "next/server";
+import { db } from "@/lib/db";
 import { findOrder } from "@/lib/order-lookup";
 import { stripeForStore } from "@/lib/stripe";
 import { orderChargeable, recordUpsell } from "@/lib/upsell";
@@ -15,12 +16,33 @@ export const runtime = "nodejs";
  */
 export async function POST(req: NextRequest) {
   const { sessionId, pi } = await req.json().catch(() => ({}));
-  if (!sessionId || !pi || !/^pi_[A-Za-z0-9]+$/.test(String(pi))) {
+  const ref = String(pi ?? "");
+  const esWhop = /^whop:[A-Za-z0-9_]+$/.test(ref);
+  if (!sessionId || !ref || !(esWhop || /^pi_[A-Za-z0-9]+$/.test(ref))) {
     return NextResponse.json({ error: "Faltan datos" }, { status: 400 });
   }
 
   const order = await findOrder(String(sessionId));
   if (!order) return NextResponse.json({ error: "Pedido no válido" }, { status: 403 });
+
+  // Con Whop no hay nada que preguntarle a la pasarela desde acá: el cobro lo
+  // confirma el webhook `payment.succeeded`, que es el único que escribe el
+  // renglón. Así que la pregunta es literalmente «¿ya llegó?», y la respuesta
+  // sale de nuestra propia base. Preguntarle a Whop en paralelo abriría la
+  // puerta a registrar dos veces la misma compra por dos caminos distintos.
+  if (esWhop) {
+    const { data: item } = await db
+      .from("order_items")
+      .select("id,product_id,products(slug)")
+      .eq("order_id", order.id)
+      .eq("stripe_payment_intent", ref)
+      .maybeSingle();
+    if (item) {
+      const prod = item.products as unknown as { slug?: string } | null;
+      return NextResponse.json({ ok: true, ...(prod?.slug ? { product: prod.slug } : {}) });
+    }
+    return NextResponse.json({ ok: true, processing: true }, { status: 202 });
+  }
   const { stripe, livemode } = await stripeForStore(order.store_id);
   if (!orderChargeable(order.status, livemode)) {
     return NextResponse.json({ error: "Pedido no válido" }, { status: 403 });

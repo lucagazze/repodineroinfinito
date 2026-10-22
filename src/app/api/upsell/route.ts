@@ -5,6 +5,7 @@ import { db, getProductById } from "@/lib/db";
 import { getRates, priceFor, toMinor } from "@/lib/fx";
 import { resolveChain } from "@/lib/postpurchase";
 import { orderChargeable, recordUpsell } from "@/lib/upsell";
+import { cobrarGuardada, conexionDe } from "@/lib/whop";
 
 export const runtime = "nodejs";
 
@@ -43,11 +44,18 @@ export async function POST(req: NextRequest) {
   const col = ref.startsWith("pi_") ? "stripe_payment_intent" : "stripe_session_id";
   const { data: order } = await db
     .from("orders")
-    .select("id,store_id,funnel_id,pp_funnel_id,stripe_customer,currency,status,email")
+    .select("id,store_id,funnel_id,pp_funnel_id,stripe_customer,currency,status,email,whop_member_id,whop_payment_method_id")
     .eq(col, ref)
     .maybeSingle();
 
   if (!order) return NextResponse.json({ error: "Pedido no válido" }, { status: 403 });
+
+  // Whop va primero: `stripeForStore` tira si la tienda no tiene Stripe, y una
+  // tienda que cobra con Whop no lo tiene. Si se consultara igual, el post-pago
+  // devolvia 500 y el comprador veia un error con la tarjeta ya guardada.
+  const whop = await conexionDe(order.store_id);
+  if (whop) return cobrarConWhop(req, body, order, whop);
+
   const { stripe, livemode } = await stripeForStore(order.store_id);
   if (!orderChargeable(order.status, livemode)) {
     return NextResponse.json({ error: "Pedido no válido" }, { status: 403 });
@@ -228,5 +236,83 @@ function safeReturnUrl(raw: string | undefined, req: NextRequest) {
     return u.toString();
   } catch {
     return null;
+  }
+}
+
+/**
+ * El mismo upsell de 1 clic, cobrado con Whop.
+ *
+ * Tres diferencias con Stripe, y las tres cambian lo que se le contesta al
+ * navegador:
+ *
+ *  1. Se cobra un PLAN, no un importe suelto: `payments.create` con tarjeta
+ *     guardada exige `plan_id`. Por eso cada producto del post-pago lleva su
+ *     `whop_plan_id`, y sin el no se intenta cobrar — se avisa, que es muy
+ *     distinto de cobrar mal.
+ *  2. El cobro es ASINCRONO. La respuesta trae el pago ABIERTO; lo que entro
+ *     lo dice el webhook `payment.succeeded`. Nunca se contesta `ok: true`
+ *     desde aca: seria prometerle al comprador un cobro que puede no entrar.
+ *  3. No hay hoja de pago de respaldo. Si la tarjeta guardada falla, la
+ *     respuesta lo dice y la pagina ofrece seguir sin el extra.
+ */
+async function cobrarConWhop(
+  req: NextRequest,
+  body: { productSlug?: string; returnUrl?: string },
+  order: {
+    id: string; store_id: string; currency: string | null; status: string | null; email: string | null;
+    whop_member_id: string | null; whop_payment_method_id: string | null;
+  },
+  conn: { apiKey: string; companyId: string; livemode: boolean },
+) {
+  if (!orderChargeable(order.status, conn.livemode)) {
+    return NextResponse.json({ error: "Pedido no válido" }, { status: 403 });
+  }
+  if (!order.whop_member_id || !order.whop_payment_method_id) {
+    // Compras anteriores a que se pidiera guardar la tarjeta. No es un error
+    // del comprador y no se le muestra como tal.
+    return NextResponse.json({ reason: "no_saved_method" }, { status: 409 });
+  }
+
+  const chain = await resolveChain(order as never);
+  const offered = chain.steps.find((p) => p.slug === body.productSlug);
+  if (!offered) return NextResponse.json({ error: "Oferta no disponible" }, { status: 404 });
+
+  const product = await getProductById(offered.id);
+  if (!product) return NextResponse.json({ error: "Oferta sin producto" }, { status: 500 });
+  const plan = (product as unknown as { whop_plan_id?: string | null }).whop_plan_id;
+  if (!plan) {
+    console.error("[upsell whop] producto sin whop_plan_id:", product.slug);
+    return NextResponse.json({ reason: "not_available" }, { status: 409 });
+  }
+
+  // ¿Ya lo tiene? No cobrarlo dos veces si recarga.
+  const { data: dup } = await db
+    .from("order_items").select("id")
+    .eq("order_id", order.id).eq("product_id", product.id).maybeSingle();
+  if (dup) return NextResponse.json({ ok: true, already: true });
+
+  try {
+    const pago = await cobrarGuardada(conn.apiKey, {
+      accountId: conn.companyId,
+      planId: plan,
+      memberId: order.whop_member_id,
+      paymentMethodId: order.whop_payment_method_id,
+      // El comprador está en la pantalla: si el banco pide 3DS se le muestra
+      // ahí mismo en vez de rechazar el cobro. Whop EXIGE una vuelta cuando el
+      // comprador está presente, así que si el navegador no mandó una válida se
+      // cae al origen en vez de dejar que el cobro reviente por un campo vacío.
+      returnUrl: safeReturnUrl(body.returnUrl, req) ?? new URL(req.url).origin,
+      metadata: { source: "checkout-propio", order: order.id, product: product.slug, kind: "upsell" },
+      // Reintentar el mismo botón no cobra dos veces.
+      idempotencyKey: `up_${order.id}_${product.id}`,
+    });
+    // 202 y no 200: el dinero todavía no entró. La página espera al webhook.
+    return NextResponse.json(
+      { reason: "processing", pi: `whop:${pago.id}`, method: "whop" },
+      { status: 202 },
+    );
+  } catch (err) {
+    console.error("[upsell whop] cobro falló:", (err as Error).message);
+    return NextResponse.json({ reason: "declined" }, { status: 409 });
   }
 }
