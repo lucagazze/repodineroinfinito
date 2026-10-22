@@ -79,6 +79,26 @@ def radiografia(token, etiqueta):
     else:
         print(f"     no pude leer sus permisos: {d}")
 
+    # HASTA DONDE LLEGA. Un token de usuario del sistema no esta acotado a una
+    # cuenta: alcanza TODO lo que se le asigno a ese usuario. Si el token toca
+    # dos negocios, una filtracion toca los dos. Conviene verlo antes de
+    # guardarlo, no despues.
+    print("\n     hasta donde llega:")
+    ok, yo = graph("me", token, "id,name")
+    if ok: print(f"       usuario     {yo.get('name','?')}  ({yo.get('id','?')})")
+    for ruta, campos, et in (("me/businesses", "id,name", "negocios"),
+                             ("me/adaccounts", "id,name,account_status", "cuentas publicitarias")):
+        okx, dx = graph(ruta, token, campos)
+        if not okx:
+            print(f"       {et:<11} no pude leerlas: {dx}")
+            continue
+        filas = dx.get("data", [])
+        print(f"       {et:<11} {len(filas)}")
+        for x in filas[:12]:
+            marca = "  <- la de Physics/Finance" if x.get("id", "").endswith("4624146111239384") else ""
+            print(f"                     {x.get('name','?')[:44]}  {x.get('id','')}{marca}")
+        if len(filas) > 12: print(f"                     … y {len(filas)-12} mas")
+
     ACT = "act_4624146111239384"
     pruebas = [
         ("leer la cuenta publicitaria", lambda: graph(ACT, token, "name,currency,account_status")),
