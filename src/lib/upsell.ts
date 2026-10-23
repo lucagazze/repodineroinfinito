@@ -1,4 +1,5 @@
 import type Stripe from "stripe";
+import { incluidosDe } from "./incluidos";
 import { withBrand } from "./brand";
 import { stripeForStore } from "./stripe";
 import { db, getProductById, STORE_COLS, type Store } from "./db";
@@ -151,6 +152,19 @@ export async function recordUpsell(
   // tiempo: el índice único lo frenó. Ese ya manda el email: acá no se repite.
   if (insErr?.code === "23505") return true;
   if (insErr) console.error("[upsell] order_items:", insErr.message);
+  // Lo que el producto entrega adentro suyo: la guia que acompana a la
+  // planilla, los cuatro libros de un pack. Antes solo lo hacia la compra de
+  // PRUEBA, asi que el test pasaba y la entrega real salia corta.
+  if (!insErr && prod?.id) {
+    const dentro = await incluidosDe(order!.store_id, [prod.id]).catch(() => [] as string[]);
+    if (dentro.length) {
+      const { error } = await db.from("order_items").insert(dentro.map((id) => ({
+        order_id: orderId, product_id: id, kind: "included" as const,
+        amount: 0, currency: intent.currency.toUpperCase(),
+      })));
+      if (error && error.code !== "23505") console.error("[upsell] incluidos:", error.message);
+    }
+  }
   // Compra desde la biblioteca de un libro de otra oferta: sus regalos (bonus del checkout) van al pedido, sin cobrar.
   const bonusIds = intent.metadata?.source === "biblioteca" && !insErr ? (intent.metadata.bonus ?? "").split(",").filter((x) => /^[0-9a-f-]{36}$/i.test(x)) : [];
   const { data: bonusProds } = bonusIds.length

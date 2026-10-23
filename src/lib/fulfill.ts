@@ -2,6 +2,7 @@ import { withBrand } from "./brand";
 import { createHmac } from "crypto";
 import { db, getFunnel, getProductById, itemsByRole, type Product } from "./db";
 import { sendDelivery } from "./email";
+import { incluidosDe } from "./incluidos";
 import { getRates, priceFor } from "./fx";
 import { DEFAULT_LOCALE, type Locale } from "./i18n";
 import { sendOrderPurchase } from "./meta";
@@ -217,6 +218,17 @@ export async function fulfill(args: {
         })),
       ]);
       if (e2) throw new Error(`no se pudieron guardar los items: ${e2.message}`);
+
+      // Lo que cada producto entrega adentro suyo (un pack y sus libros). Va
+      // despues y aparte: si esto falla, la venta ya quedo registrada.
+      const dentro = await incluidosDe(funnel.stores.id, [main.id, ...extras.map((p) => p.id), ...bumps.map((b) => b.id)])
+        .catch((e) => { console.warn("[fulfill] incluidos:", (e as Error).message); return [] as string[]; });
+      if (dentro.length) {
+        const { error: e3 } = await db.from("order_items").insert(dentro.map((id) => ({
+          order_id: order.id, product_id: id, kind: "included" as const, amount: 0, currency: cur,
+        })));
+        if (e3 && e3.code !== "23505") console.error("[fulfill] incluidos:", e3.message);
+      }
     }
 
     // La compra a Meta por el servidor, antes del mail: la venta existe aunque
