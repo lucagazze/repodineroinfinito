@@ -453,7 +453,7 @@ function CheckoutForm({
             </div>
           </section>
         )}
-        <section className="o-data">
+        <section className="o-data" data-clarity-mask="true">
           <h2 className="ck-h">{d2 ? <span className="ck-num">1</span> : <IconUser />}{t.ckPersonal}</h2>
           <label className="ck-label" htmlFor="ck-email">{t.ckEmail} *</label>
           <input
