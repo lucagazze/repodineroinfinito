@@ -180,7 +180,20 @@ export async function manejarEventoWhop(ev: Evento, ctx: { storeId: string }) {
     // apareciendo dos veces en ventas. Se reconoce por la metadata que puso
     // /api/upsell al cobrar, no por el importe ni por el plan.
     const meta = (pago.metadata ?? {}) as Record<string, string>;
-    if (meta.kind === "upsell" && meta.order) {
+
+    // UNA SUSCRIPCION VENDIDA DESDE EL POST-PAGO ES LAS DOS COSAS A LA VEZ, y
+    // el orden de estas ramas decide cual gana. /api/upsell marca el cobro con
+    // kind:"upsell", asi que sin este corte el alta caia en la rama de abajo y
+    // se registraba como un renglon mas del pedido: Whop cobrando todos los
+    // meses y la app sin fila de suscripcion -- o sea sin carta semanal, sin
+    // link de baja y sin aviso de tarjeta rechazada. Alguien pagando por algo
+    // que nunca llega, y nadie enterandose.
+    // Medido con un webhook firmado antes de encender el OTO 3.
+    const esSus = tipo === "payment.succeeded"
+      ? await (await import("@/lib/suscripcion")).suscripcionDelPlan(ctx.storeId, pago.plan?.id)
+      : null;
+
+    if (meta.kind === "upsell" && meta.order && !esSus) {
       if (tipo !== "payment.succeeded") return { pendiente: pago.id };
       const importe = montoCobrado(pago);
       if (importe === null) {
@@ -205,6 +218,16 @@ export async function manejarEventoWhop(ev: Evento, ctx: { storeId: string }) {
     if (tipo === "payment.succeeded") {
       const sus = await registrarCobroSuscripcion(ctx.storeId, pago);
       if (sus) {
+        // Si ademas vino del post-pago, el renglon va igual al pedido: la venta
+        // tiene que aparecer en Ventas con su importe, no solo en Suscripciones.
+        if (meta.kind === "upsell" && meta.order) {
+          const importe = montoCobrado(pago);
+          if (importe !== null) {
+            await registrarUpsellWhop(meta.order, pago, {
+              amount: importe, currency: (pago.currency ?? "usd") as string, at: new Date(),
+            }).catch((e) => console.error("[whop] renglon de la suscripcion:", (e as Error).message));
+          }
+        }
         // La bienvenida sale una sola vez, en el alta. `creada` lo dice la
         // base, no el importe ni el evento: un reintento del mismo pago vuelve
         // con creada=false y no escribe de nuevo.

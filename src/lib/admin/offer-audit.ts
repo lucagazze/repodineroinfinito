@@ -34,7 +34,7 @@ const UA = "Mozilla/5.0 (checkout-panel diagnóstico)";
 const FOREIGN = /mitiendanube|tiendanube|hotmart|kiwify|gumroad|shopify\.com\/checkout|eduzz|monetizze/i;
 
 type FunnelRow = { id: string; store_id: string; pixel_ids: string[] | null; settings: unknown; record_sessions: boolean | null; main_product_id: string | null };
-type ProdRow = { id: string; short_name: string | null; active: boolean; delivery_url: string | null; delivery_links: { url?: string }[] | null; delivery_file: string | null };
+type ProdRow = { id: string; short_name: string | null; active: boolean; delivery_url: string | null; delivery_links: { url?: string }[] | null; delivery_file: string | null; presale: boolean | null; presale_days: number | null };
 type Price = { product_id: string; currency: string; amount: number | null };
 
 /** De a pocos a la vez: no martillar Drive ni las landings. */
@@ -192,7 +192,7 @@ export async function auditOffers(opts: { storeId?: string; offerKey?: string } 
     // Productos que se entregan desde este checkout: principal, incluidos, bonos, bumps y todo lo del post-pago.
     const pids = [...new Set([fr?.main_product_id, ...mine.map((i) => i.product_id as string), ...("error" in pp ? [] : pp.productIds)].filter(Boolean) as string[])];
     const [{ data: prods }, { data: prices }] = await Promise.all([
-      db.from("products").select("id,short_name,active,delivery_url,delivery_links,delivery_file").in("id", pids.length ? pids : ["00000000-0000-0000-0000-000000000000"]),
+      db.from("products").select("id,short_name,active,delivery_url,delivery_links,delivery_file,presale,presale_days").in("id", pids.length ? pids : ["00000000-0000-0000-0000-000000000000"]),
       db.from("product_prices").select("product_id,currency,amount").eq("product_id", fr?.main_product_id ?? "00000000-0000-0000-0000-000000000000"),
     ]);
 
@@ -262,7 +262,15 @@ export async function auditOffers(opts: { storeId?: string; offerKey?: string } 
     // Un producto entrega de dos formas: carpeta/links (Drive) o archivo propio en
     // Supabase (delivery_file). Mirando solo la primera, una tienda que entrega
     // archivos propios salia entera en rojo con la entrega funcionando.
-    const noLink = deliverable.filter((p) => p.active && !p.delivery_url && !p.delivery_file && !(p.delivery_links ?? []).some((l) => l?.url));
+    // Una PREVENTA no es una entrega rota: su archivo todavia no existe, y ese
+    // plazo es exactamente lo que el comprador acepto. Marcarla en rojo deja el
+    // aviso encendido 60 dias, y un aviso que siempre esta encendido deja de
+    // mirarse -- el dia que falte una entrega de verdad, nadie reacciona.
+    // Tampoco se oculta: pasa a su propio renglon con el plazo, para que se siga
+    // viendo y se note el dia que venza.
+    const sinEntrega = deliverable.filter((p) => p.active && !p.delivery_url && !p.delivery_file && !(p.delivery_links ?? []).some((l) => l?.url));
+    const noLink = sinEntrega.filter((p) => !p.presale);
+    const enPreventa = sinEntrega.filter((p) => p.presale);
     const urls = [...new Set(deliverable.flatMap((p) => [p.delivery_url, ...(p.delivery_links ?? []).map((l) => l?.url)].filter(Boolean) as string[]))];
     const res = await Promise.all(urls.map(async (u) => ({ u, ...(await checkLink(u)) })));
     const broken = res.filter((r) => !r.ok);
@@ -270,6 +278,9 @@ export async function auditOffers(opts: { storeId?: string; offerKey?: string } 
       ? { status: "bad", label: `${noLink.length} sin link`, detail: `Sin link de entrega: ${noLink.slice(0, 4).map((p) => p.short_name).join(" · ")}.` }
       : broken.length
         ? { status: "bad", label: `${broken.length} no abren`, detail: broken.slice(0, 3).map((b) => `${b.u.slice(0, 70)}: ${b.why}`).join(" · ") }
+        : enPreventa.length
+          ? { status: "warn", label: `${enPreventa.length} en preventa`,
+              detail: `Todavia sin archivo, como se vendio: ${enPreventa.slice(0, 4).map((p) => `${p.short_name} (${p.presale_days ?? "?"} dias)`).join(" · ")}.` }
         : { status: "ok", label: res.length ? `${res.length} abren` : `${deliverable.length} con archivo`,
             detail: `${plural(deliverable.length, "producto", "productos")} (checkout y post-pago). `
               + (res.length ? `${plural(res.length, "link", "links")} de entrega: todos abren.` : "")
