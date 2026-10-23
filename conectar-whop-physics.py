@@ -16,7 +16,7 @@ EL SECRETO DEL WEBHOOK
   entra, el comprador espera, y el panel no muestra la venta.
 
   El webhook es POR TIENDA. El de Physics tiene que apuntar a:
-    https://pay.financestudylab.com/api/whop/webhook/97879900-b4b5-4ae5-880a-32deb872967c
+    https://pay.financestudylab.com/api/whop/webhook/physicsstudylab
 
   python3 conectar-whop-physics.py
 """
@@ -24,7 +24,7 @@ import getpass, json, pathlib, re, subprocess, sys, urllib.error, urllib.request
 
 RAIZ = pathlib.Path(__file__).parent
 TIENDA = "97879900-b4b5-4ae5-880a-32deb872967c"   # physicsstudylab
-WEBHOOK_URL = f"https://pay.financestudylab.com/api/whop/webhook/{TIENDA}"
+WEBHOOK_URL = "https://pay.financestudylab.com/api/whop/webhook/physicsstudylab"
 
 
 def limpiar(valor, etiqueta):
@@ -63,7 +63,13 @@ def main():
   esa pantalla, Whop no lo vuelve a mostrar: hay que borrar el webhook y
   hacerlo de nuevo.
 """)
-    if input("  ¿El webhook ya existe y tenés el ws_ a mano? (si/no): ").strip().lower() not in ("si", "s", "sí"):
+    resp = input("  ¿Ya creaste el webhook con esa URL? (si/no): ").strip()
+    if re.search(r"(ws_|whk_|sk_)[A-Za-z0-9_-]{8,}", resp):
+        sys.exit("\n  PARA: pegaste algo que parece una clave en un campo visible.\n"
+                 "  Quedo escrita en pantalla, asi que ya no sirve: hay que rotarla.\n"
+                 "  Borra ese webhook en Whop, crealo de nuevo y volve a correr esto.\n"
+                 "  El secreto se pide mas adelante, y ahi SI va oculto.\n")
+    if resp.lower() not in ("si", "s", "sí"):
         sys.exit("\n  Creá el webhook primero con esa URL y volvé. No guardo nada a medias.\n")
 
     print()
