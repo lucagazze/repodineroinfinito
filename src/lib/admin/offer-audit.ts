@@ -211,7 +211,17 @@ export async function auditOffers(opts: { storeId?: string; offerKey?: string } 
     // Productos que se entregan desde este checkout: principal, incluidos, bonos, bumps y todo lo del post-pago.
     const pids = [...new Set([fr?.main_product_id, ...mine.map((i) => i.product_id as string), ...("error" in pp ? [] : pp.productIds)].filter(Boolean) as string[])];
     const [{ data: prods }, { data: prices }] = await Promise.all([
-      db.from("products").select("id,slug,short_name,active,includes,delivery_url,delivery_links,delivery_file,presale,presale_days,subscription").in("id", pids.length ? pids : ["00000000-0000-0000-0000-000000000000"]),
+      db.from("products").select("id,slug,short_name,active,includes,delivery_url,delivery_links,delivery_file,presale,presale_days,subscription")
+        .in("id", pids.length ? pids : ["00000000-0000-0000-0000-000000000000"])
+        .then(async (r) => {
+          const dentro = [...new Set(((r.data ?? []) as { includes: string[] | null }[])
+            .flatMap((x) => (x.includes ?? []).filter(Boolean)))].filter((id) => !pids.includes(id));
+          if (!dentro.length || r.error) return r;
+          const hijos = await db.from("products")
+            .select("id,slug,short_name,active,includes,delivery_url,delivery_links,delivery_file,presale,presale_days,subscription")
+            .in("id", dentro);
+          return { ...r, data: [...(r.data ?? []), ...(hijos.data ?? [])] };
+        }),
       db.from("product_prices").select("product_id,currency,amount").eq("product_id", fr?.main_product_id ?? "00000000-0000-0000-0000-000000000000"),
     ]);
 
