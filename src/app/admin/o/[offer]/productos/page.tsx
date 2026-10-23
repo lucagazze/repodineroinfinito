@@ -38,10 +38,10 @@ type Prod = {
   id: string; slug: string; short_name: string; name: string; description: string | null; kind: string; active: boolean;
   image_url: string | null; email_image_url: string | null; delivery_url: string | null; delivery_file: string | null;
   delivery_links?: { url?: string }[] | null;
-  presale?: boolean | null; presale_days?: number | null; subscription?: boolean | null;
+  presale?: boolean | null; presale_days?: number | null; subscription?: boolean | null; includes?: string[] | null;
   variant_of?: string | null; product_prices: { currency: string; amount: number | string | null; compare_at: number | string | null }[] | null;
 };
-const PCOLS = "id,slug,short_name,name,description,kind,active,image_url,email_image_url,delivery_url,delivery_file,delivery_links,presale,presale_days,subscription,product_prices(currency,amount,compare_at)";
+const PCOLS = "id,slug,short_name,name,description,kind,active,image_url,email_image_url,delivery_url,delivery_file,delivery_links,includes,presale,presale_days,subscription,product_prices(currency,amount,compare_at)";
 
 /** Pasos del post-pago de cada cadena: OTO 1..3 por nivel (migración 021) o, en cadenas viejas, por orden. */
 async function ppSteps(ids: string[]) {
@@ -178,7 +178,13 @@ async function ProductsSection({ sc }: { sc: Scope }) {
       })
       .map((r) => r.product_id)
   );
-  const falta = (p: Prod) => lacks(p) && !p.subscription && (!p.presale || vencidas.has(p.id));
+  // Un pack entrega lo que incluye, no un archivo propio.
+  const porId = new Map(used.map((x) => [x.id, x]));
+  const entregaLoQueIncluye = (p: Prod) => {
+    const dentro = ((p as { includes?: string[] | null }).includes ?? []).filter(Boolean);
+    return dentro.length > 0 && dentro.every((id) => { const h = porId.get(id); return !!h && !lacks(h); });
+  };
+  const falta = (p: Prod) => lacks(p) && !p.subscription && !entregaLoQueIncluye(p) && (!p.presale || vencidas.has(p.id));
   const missing = used.filter((p) => p.active && deliverable(p) && falta(p))
     .map((p) => ({
       id: p.id, name: p.short_name, link: `${base}/${p.id}`,

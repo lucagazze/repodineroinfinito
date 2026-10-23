@@ -34,7 +34,7 @@ const UA = "Mozilla/5.0 (checkout-panel diagnóstico)";
 const FOREIGN = /mitiendanube|tiendanube|hotmart|kiwify|gumroad|shopify\.com\/checkout|eduzz|monetizze/i;
 
 type FunnelRow = { id: string; store_id: string; pixel_ids: string[] | null; settings: unknown; record_sessions: boolean | null; main_product_id: string | null };
-type ProdRow = { id: string; slug: string; short_name: string | null; active: boolean; delivery_url: string | null; delivery_links: { url?: string }[] | null; delivery_file: string | null; presale: boolean | null; presale_days: number | null; subscription: boolean | null };
+type ProdRow = { id: string; slug: string; short_name: string | null; active: boolean; includes: string[] | null; delivery_url: string | null; delivery_links: { url?: string }[] | null; delivery_file: string | null; presale: boolean | null; presale_days: number | null; subscription: boolean | null };
 type Price = { product_id: string; currency: string; amount: number | null };
 
 /** De a pocos a la vez: no martillar Drive ni las landings. */
@@ -211,7 +211,7 @@ export async function auditOffers(opts: { storeId?: string; offerKey?: string } 
     // Productos que se entregan desde este checkout: principal, incluidos, bonos, bumps y todo lo del post-pago.
     const pids = [...new Set([fr?.main_product_id, ...mine.map((i) => i.product_id as string), ...("error" in pp ? [] : pp.productIds)].filter(Boolean) as string[])];
     const [{ data: prods }, { data: prices }] = await Promise.all([
-      db.from("products").select("id,slug,short_name,active,delivery_url,delivery_links,delivery_file,presale,presale_days,subscription").in("id", pids.length ? pids : ["00000000-0000-0000-0000-000000000000"]),
+      db.from("products").select("id,slug,short_name,active,includes,delivery_url,delivery_links,delivery_file,presale,presale_days,subscription").in("id", pids.length ? pids : ["00000000-0000-0000-0000-000000000000"]),
       db.from("product_prices").select("product_id,currency,amount").eq("product_id", fr?.main_product_id ?? "00000000-0000-0000-0000-000000000000"),
     ]);
 
@@ -287,7 +287,19 @@ export async function auditOffers(opts: { storeId?: string; offerKey?: string } 
     // mirarse -- el dia que falte una entrega de verdad, nadie reacciona.
     // Tampoco se oculta: pasa a su propio renglon con el plazo, para que se siga
     // viendo y se note el dia que venza.
-    const sinEntrega = deliverable.filter((p) => p.active && !p.delivery_url && !p.delivery_file && !(p.delivery_links ?? []).some((l) => l?.url));
+    const tieneArchivo = (p: ProdRow) => !!p.delivery_url || !!p.delivery_file || (p.delivery_links ?? []).some((l) => l?.url);
+    const porId = new Map(deliverable.map((p) => [p.id, p]));
+    // Un PACK no tiene archivo propio y no le hace falta: entrega lo que trae
+    // adentro, y eso se expande al armar el pedido (incluidos.ts). Marcarlo
+    // como «sin link» es el mismo punto ciego que tenian la preventa y la
+    // suscripcion: un aviso siempre encendido que se deja de mirar.
+    // Solo cuenta como entregable si TODO lo que incluye tiene archivo.
+    const entregaLoQueIncluye = (p: ProdRow) => {
+      const dentro = (p.includes ?? []).filter(Boolean);
+      return dentro.length > 0 && dentro.every((id) => { const h = porId.get(id); return !!h && tieneArchivo(h); });
+    };
+    const sinEntrega = deliverable.filter((p) => p.active && !tieneArchivo(p) && !entregaLoQueIncluye(p));
+    const packs = deliverable.filter((p) => p.active && !tieneArchivo(p) && entregaLoQueIncluye(p));
     // Y una SUSCRIPCION tampoco: se entrega como la edicion de cada semana.
     // Una variante comparte el short_name con su base (el trial de la
     // suscripcion se llama igual que la suscripcion), asi que la lista salia
@@ -311,6 +323,9 @@ export async function auditOffers(opts: { storeId?: string; offerKey?: string } 
       ? { status: "bad", label: `${noLink.length} sin link`, detail: `Sin link de entrega: ${nombres(noLink.slice(0, 4)).join(" · ")}.` }
       : broken.length
         ? { status: "bad", label: `${broken.length} no abren`, detail: broken.slice(0, 3).map((b) => `${b.u.slice(0, 70)}: ${b.why}`).join(" · ") }
+        : packs.length
+          ? { status: "ok", label: `${packs.length} ${packs.length === 1 ? "pack" : "packs"}`,
+              detail: `Entrega lo que trae adentro: ${nombres(packs).join(" · ")}.` }
         : suscripciones.length
           ? { status: "ok", label: `${suscripciones.length} por suscripcion`,
               detail: `Se entrega como la edicion de cada semana: ${nombres(suscripciones).join(" · ")}.` }
