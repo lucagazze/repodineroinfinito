@@ -34,7 +34,9 @@ export function thankYouItems(products: Product[], kinds: Map<string, string>, o
       ...(main ? [{ label: p.short_name, url: main }] : []),
       ...(p.delivery_links ?? []).filter((l) => l && /^https?:\/\//.test(l.url)),
     ];
-    const base = { id: p.id, slug: p.slug, name: p.short_name, image: p.image_url, kind: kinds.get(p.id) ?? "main" };
+    const archivo = p.delivery_file_name || p.delivery_file || "";
+    const base = { id: p.id, slug: p.slug, name: p.short_name, image: p.image_url,
+      kind: kinds.get(p.id) ?? "main", ext: archivo.split(".").pop()?.toLowerCase() };
     if (links.length) items.push({ ...base, links });
     // Una suscripcion no tiene boton y no esta «incluida»: se cobra aparte y
     // llega por mail. Va como renglon propio con lo que pasa ahora, en vez de

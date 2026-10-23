@@ -195,6 +195,8 @@ type Defaults = {
   samplePages: (n: number) => string;
   boxKicker: string;
   priceNote: string;
+  /** Lo mismo, cuando lo que se ofrece se renueva. */
+  priceNoteSub: string;
   ctaText: string;
   ctaNote: string;
   guarantee: (days: number) => string;
@@ -222,6 +224,7 @@ const D: Record<Locale, Defaults> = {
     samplePages: (n) => `${n} sample page${n === 1 ? "" : "s"}`,
     boxKicker: "Add it to your order in one tap",
     priceNote: "One payment · added to the order you just made",
+    priceNoteSub: "Recurring · cancel in one click, any time",
     ctaText: "YES — ADD {product} · {price}",
     ctaNote: "One tap · you will not enter your card again",
     guarantee: (d) => `Secure payment${d ? ` · ${d}-day guarantee` : ""} · Instant access\nYou will not enter your card again.`,
@@ -247,6 +250,7 @@ const D: Record<Locale, Defaults> = {
     samplePages: (n) => `${n} pagin${n === 1 ? "a" : "e"} di esempio`,
     boxKicker: "Aggiungilo al tuo ordine con un tocco",
     priceNote: "Un solo pagamento · si aggiunge all’ordine appena fatto",
+    priceNoteSub: "Abbonamento · disdici in un clic, quando vuoi",
     ctaText: "SÌ — AGGIUNGI {product} · {price}",
     ctaNote: "Un tocco · non devi reinserire la carta",
     guarantee: (d) => `Pagamento sicuro${d ? ` · garanzia di ${d} giorni` : ""} · Accesso immediato\nNon devi reinserire la carta.`,
@@ -272,6 +276,7 @@ const D: Record<Locale, Defaults> = {
     samplePages: (n) => `${n} página${n === 1 ? "" : "s"} de muestra`,
     boxKicker: "Añádelo a tu pedido con un toque",
     priceNote: "Un solo pago · se añade al pedido que acabas de hacer",
+    priceNoteSub: "Suscripción · se cancela en un clic, cuando quieras",
     ctaText: "SÍ — AÑADIR {product} · {price}",
     ctaNote: "Un toque · no tienes que volver a introducir la tarjeta",
     guarantee: (d) => `Pago seguro${d ? ` · garantía de ${d} días` : ""} · Acceso inmediato\nNo tienes que volver a introducir la tarjeta.`,
@@ -297,6 +302,7 @@ const D: Record<Locale, Defaults> = {
     samplePages: (n) => `${n} página${n === 1 ? "" : "s"} de amostra`,
     boxKicker: "Adicione ao seu pedido com um toque",
     priceNote: "Pagamento único · adicionado ao pedido que você acabou de fazer",
+    priceNoteSub: "Assinatura · cancele em um clique, quando quiser",
     ctaText: "SIM — ADICIONAR {product} · {price}",
     ctaNote: "Um toque · você não precisa digitar o cartão de novo",
     guarantee: (d) => `Pagamento seguro${d ? ` · garantia de ${d} dias` : ""} · Acesso imediato\nVocê não precisa digitar o cartão de novo.`,
@@ -322,6 +328,7 @@ const D: Record<Locale, Defaults> = {
     samplePages: (n) => `${n} page${n === 1 ? "" : "s"} d’exemple`,
     boxKicker: "Ajoute-le à ta commande en un geste",
     priceNote: "Un seul paiement · ajouté à la commande que tu viens de passer",
+    priceNoteSub: "Abonnement · résilie en un clic, quand tu veux",
     ctaText: "OUI — AJOUTER {product} · {price}",
     ctaNote: "Un geste · tu n’auras pas à ressaisir ta carte",
     guarantee: (d) => `Paiement sécurisé${d ? ` · garantie ${d} jours` : ""} · Accès immédiat\nTu n’auras pas à ressaisir ta carte.`,
@@ -347,6 +354,7 @@ const D: Record<Locale, Defaults> = {
     samplePages: (n) => `${n} Beispielseite${n === 1 ? "" : "n"}`,
     boxKicker: "Mit einem Tipp zu deiner Bestellung",
     priceNote: "Einmalzahlung · wird zu deiner gerade getätigten Bestellung hinzugefügt",
+    priceNoteSub: "Abo · jederzeit mit einem Klick kündbar",
     ctaText: "JA — {product} HINZUFÜGEN · {price}",
     ctaNote: "Ein Tipp · du musst deine Karte nicht erneut eingeben",
     guarantee: (d) => `Sichere Zahlung${d ? ` · ${d} Tage Garantie` : ""} · Sofortiger Zugang\nDu musst deine Karte nicht erneut eingeben.`,
@@ -406,7 +414,7 @@ export function offerUi(locale: Locale): OfferUi {
 
 export type ViewInput = {
   page: unknown;
-  product: { short_name: string; name: string; description: string; image_url: string | null; presale?: boolean | null; presale_days?: number | null };
+  product: { short_name: string; name: string; description: string; image_url: string | null; presale?: boolean | null; presale_days?: number | null; subscription?: boolean | null };
   locale: Locale;
   /** Ya formateados en la moneda del pedido. */
   price: string;
@@ -510,7 +518,10 @@ export function buildOfferView(i: ViewInput): OfferView {
     bullets: p.bullets.map(f),
     price: i.price,
     compare: i.compare,
-    priceNote: d.priceNote,
+    // «One payment» debajo de una suscripcion era falso, y se contradecia con
+    // el boton de al lado («Add it — $9 a month»). Es lo que lee el que esta
+    // por arrancar un cobro que se repite.
+    priceNote: i.product.subscription ? d.priceNoteSub : d.priceNote,
     ctaText: or(p.ctaText, d.ctaText),
     // Preventa: lo primero que se lee bajo el botón es cuándo llega (055).
     // Nunca un plazo de preventa a la vista del comprador: el aviso va solo en el documento de Drive.

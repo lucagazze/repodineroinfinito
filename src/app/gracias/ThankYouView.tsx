@@ -22,6 +22,9 @@ export type TyItem = {
   image: string | null;
   kind: string;
   links: { label: string; url: string }[];
+  /** Extension del archivo propio (pdf, xlsx...): sin esto el pie decia
+   *  «Downloads the PDF» tambien debajo de la planilla de Excel. */
+  ext?: string;
   /** Para lo que NO se baja: una suscripcion llega por mail cada semana, no
    *  por un boton. Sin esto caia en la lista de «Incluido», junto a los bonos
    *  gratis -- y una suscripcion de pago no esta incluida en nada. */
@@ -39,6 +42,7 @@ type Texts = {
   opensDrive: string;
   opensTab: string;
   pdf: string;
+  sheet: string;
   help: string;
 };
 
@@ -48,7 +52,7 @@ const TX: Record<Locale, Texts> = {
     lead: "Your order is ready. Download it below.",
     leadSent: "Your order is ready. Download it below — we also emailed the links to",
     yourPurchase: "Your purchase", added: "Added to your order", bonus: "Bonus", included: "Included",
-    opensDrive: "Opens in Google Drive", opensTab: "Opens in a new tab", pdf: "Downloads the PDF",
+    opensDrive: "Opens in Google Drive", opensTab: "Opens in a new tab", pdf: "Downloads the PDF", sheet: "Downloads the Excel file",
     help: "Need a hand? Write to",
   },
   it: {
@@ -56,7 +60,7 @@ const TX: Record<Locale, Texts> = {
     lead: "Il tuo ordine è pronto. Scaricalo qui sotto.",
     leadSent: "Il tuo ordine è pronto. Scaricalo qui sotto: ti abbiamo mandato i link anche a",
     yourPurchase: "Il tuo acquisto", added: "Aggiunto al tuo ordine", bonus: "Bonus", included: "Incluso",
-    opensDrive: "Si apre in Google Drive", opensTab: "Si apre in una nuova scheda", pdf: "Scarica il PDF",
+    opensDrive: "Si apre in Google Drive", opensTab: "Si apre in una nuova scheda", pdf: "Scarica il PDF", sheet: "Scarica il file Excel",
     help: "Serve aiuto? Scrivi a",
   },
   es: {
@@ -64,7 +68,7 @@ const TX: Record<Locale, Texts> = {
     lead: "Tu pedido está listo. Descargalo acá abajo.",
     leadSent: "Tu pedido está listo. Descargalo acá abajo: también te mandamos los links a",
     yourPurchase: "Tu compra", added: "Sumado a tu pedido", bonus: "Bonus", included: "Incluido",
-    opensDrive: "Se abre en Google Drive", opensTab: "Se abre en una pestaña nueva", pdf: "Descarga el PDF",
+    opensDrive: "Se abre en Google Drive", opensTab: "Se abre en una pestaña nueva", pdf: "Descarga el PDF", sheet: "Descarga el archivo de Excel",
     help: "¿Necesitás ayuda? Escribí a",
   },
   "pt-BR": {
@@ -72,7 +76,7 @@ const TX: Record<Locale, Texts> = {
     lead: "Seu pedido está pronto. Baixe aqui embaixo.",
     leadSent: "Seu pedido está pronto. Baixe aqui embaixo: também enviamos os links para",
     yourPurchase: "Sua compra", added: "Adicionado ao seu pedido", bonus: "Bônus", included: "Incluído",
-    opensDrive: "Abre no Google Drive", opensTab: "Abre em uma nova aba", pdf: "Baixa o PDF",
+    opensDrive: "Abre no Google Drive", opensTab: "Abre em uma nova aba", pdf: "Baixa o PDF", sheet: "Baixa o arquivo do Excel",
     help: "Precisa de ajuda? Escreva para",
   },
   fr: {
@@ -80,7 +84,7 @@ const TX: Record<Locale, Texts> = {
     lead: "Ta commande est prête. Télécharge-la ci-dessous.",
     leadSent: "Ta commande est prête. Télécharge-la ci-dessous : nous t’avons aussi envoyé les liens à",
     yourPurchase: "Ton achat", added: "Ajouté à ta commande", bonus: "Bonus", included: "Inclus",
-    opensDrive: "S’ouvre dans Google Drive", opensTab: "S’ouvre dans un nouvel onglet", pdf: "Télécharge le PDF",
+    opensDrive: "S’ouvre dans Google Drive", opensTab: "S’ouvre dans un nouvel onglet", pdf: "Télécharge le PDF", sheet: "Télécharge le fichier Excel",
     help: "Besoin d’aide ? Écris à",
   },
   de: {
@@ -88,7 +92,7 @@ const TX: Record<Locale, Texts> = {
     lead: "Deine Bestellung ist fertig. Lade sie unten herunter.",
     leadSent: "Deine Bestellung ist fertig. Lade sie unten herunter – die Links haben wir dir auch geschickt an",
     yourPurchase: "Dein Kauf", added: "Zu deiner Bestellung hinzugefügt", bonus: "Bonus", included: "Inklusive",
-    opensDrive: "Öffnet sich in Google Drive", opensTab: "Öffnet sich in einem neuen Tab", pdf: "Lädt das PDF herunter",
+    opensDrive: "Öffnet sich in Google Drive", opensTab: "Öffnet sich in einem neuen Tab", pdf: "Lädt das PDF herunter", sheet: "Lädt die Excel-Datei herunter",
     help: "Brauchst du Hilfe? Schreib an",
   },
 };
@@ -182,8 +186,14 @@ export function ThankYouView(p: {
   const tx = TX[p.locale] ?? TX.en;
   const t = T[p.locale] ?? T.en;
   const tagOf = (k: string) => (k === "main" ? tx.yourPurchase : k === "bump" || k === "upsell" ? tx.added : k === "bonus" ? tx.bonus : tx.included);
-  const hintOf = (u: string) =>
-    /drive\.google\.com|docs\.google\.com/i.test(u) ? tx.opensDrive : /\/d\/[^/]+\/[^/]+$/.test(u) || /\.pdf(\?|$)/i.test(u) ? tx.pdf : tx.opensTab;
+  // La ruta propia /d/{pedido}/{producto} sirve lo que sea que tenga cargado
+  // el producto, no siempre un PDF: el Valuation Sheet es un .xlsx y el pie
+  // decia «Downloads the PDF» igual.
+  const hintOf = (u: string, ext?: string) =>
+    /drive\.google\.com|docs\.google\.com/i.test(u) ? tx.opensDrive
+    : /^(xlsx|xls|csv|numbers)$/i.test(ext ?? "") ? tx.sheet
+    : /\/d\/[^/]+\/[^/]+$/.test(u) || /\.pdf(\?|$)/i.test(u) ? tx.pdf
+    : tx.opensTab;
 
   return (
     <div className={`ty ${inter.className}`} style={{ "--ty-font": inter.style.fontFamily } as CSSProperties}>
@@ -228,7 +238,7 @@ export function ThankYouView(p: {
                   </a>
                 ))}
                 {it.note && <p className="hint">{it.note}</p>}
-                {it.links[0] && <p className="hint">{hintOf(it.links[0].url)}</p>}
+                {it.links[0] && <p className="hint">{hintOf(it.links[0].url, it.ext)}</p>}
               </div>
             ))}
           </section>
