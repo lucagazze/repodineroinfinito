@@ -23,13 +23,13 @@ export function kindMap(rows: { product_id: string; kind: string }[]) {
  * Sin pedido (simulación), un archivo propio no tiene link: queda "#".
  */
 export function thankYouItems(products: Product[], kinds: Map<string, string>, orderId: string | null,
-  opts: { sub?: (p: Product) => boolean; nota?: string } = {}) {
-  const { sub, nota } = opts;
+  opts: { sub?: (p: Product) => boolean; nota?: string; storeDomain?: string | null } = {}) {
+  const { sub, nota, storeDomain } = opts;
   const sorted = [...products].sort((a, b) => (RANK[kinds.get(a.id) ?? ""] ?? 9) - (RANK[kinds.get(b.id) ?? ""] ?? 9));
   const items: TyItem[] = [];
   const included: string[] = [];
   for (const p of sorted) {
-    const main = hasDownload(p) ? downloadHref(p, orderId) ?? "#" : null;
+    const main = hasDownload(p) ? downloadHref(p, orderId, storeDomain) ?? "#" : null;
     const links = [
       ...(main ? [{ label: p.short_name, url: main }] : []),
       ...(p.delivery_links ?? []).filter((l) => l && /^https?:\/\//.test(l.url)),

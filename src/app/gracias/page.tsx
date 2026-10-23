@@ -130,7 +130,7 @@ export default async function Gracias({
   }
 
   const [{ data: store }, { data: totals }, { data: items }] = await Promise.all([
-    db.from("stores").select("name,display_name,brand,logo_url,support_email,guarantee_days,thankyou").eq("id", order.store_id).single(),
+    db.from("stores").select("name,display_name,brand,logo_url,support_email,guarantee_days,thankyou,domain").eq("id", order.store_id).single(),
     db.from("orders").select("amount_total,number").eq("id", order.id).single(),
     // Se entrega todo lo que quedó en el pedido: principal, incluidos, bonos,
     // bumps y los upsells que aceptó. Un producto aparece una sola vez aunque
@@ -143,6 +143,7 @@ export default async function Gracias({
     .filter((p): p is Product => !!p);
   const { items: cards, included } = thankYouItems(products, kinds, order.id, {
     sub: (p) => !!p.subscription,
+    storeDomain: store?.domain ?? null,
     nota: SUB_NOTA[locale] ?? SUB_NOTA.en,
   });
 

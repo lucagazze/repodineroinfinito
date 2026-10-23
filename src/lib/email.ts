@@ -66,9 +66,9 @@ function button(href: string, label: string, opts: { big?: boolean; color?: stri
 </td></tr></table>`;
 }
 
-function itemRow(p: Product, t: (typeof T)[Locale], mainFolder: string | null, color: string, orderId?: string) {
+function itemRow(p: Product, t: (typeof T)[Locale], mainFolder: string | null, color: string, orderId?: string, storeDomain?: string | null) {
   const img = cover(p);
-  const href = downloadHref(p, orderId);
+  const href = downloadHref(p, orderId, storeDomain);
   const action = href
     ? button(href, t.mailDownload, { color })
     : `<span style="display:inline-block;font-family:${FONT};font-size:11px;font-weight:700;color:#15803d;background:#dcfce7;border-radius:5px;padding:4px 8px">${esc(mainFolder ? t.mailInside : t.ckFree)}</span>`;
@@ -158,7 +158,7 @@ ${url ? `<tr><td align="center">${button(url, t.mailOpen(a.main.short_name), { b
 ${esDrive(url) ? `<tr><td align="center" style="padding:12px 0 0;font-family:${FONT};font-size:12px;line-height:1.5;color:${MUTED}">${esc(t.mailTip)}</td></tr>` : ""}` : ""}
 
 <tr><td style="padding:30px 0 4px;font-family:${FONT};font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:${MUTED}">${esc(t.mailYourOrder)}</td></tr>
-${items.map((p) => itemRow(p, t, url || null, color, a.orderId)).join("")}
+${items.map((p) => itemRow(p, t, url || null, color, a.orderId, a.store.domain)).join("")}
 
 <tr><td style="padding:14px 0 0;border-top:1px solid ${LINE};font-family:${FONT}">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
