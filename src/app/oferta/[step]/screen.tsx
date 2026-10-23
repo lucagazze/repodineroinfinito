@@ -55,8 +55,9 @@ export async function OfferScreen(i: {
       storeName,
       productName: i.product.short_name || i.product.name,
       orderNumber: i.orderNumber ?? `#${orderNumberOf(i.orderId)}`,
-      savings: compare ? fmt(Math.round((compareAt - amount) * 100) / 100) : null,
-      discount: compare ? `${Math.round((1 - amount / compareAt) * 100)}%` : null,
+      // Por lo mismo que el badge: en una suscripcion no hay ahorro que contar.
+      savings: compare && !i.product.subscription ? fmt(Math.round((compareAt - amount) * 100) / 100) : null,
+      discount: compare && !i.product.subscription ? `${Math.round((1 - amount / compareAt) * 100)}%` : null,
     });
     // Preventa (055): la landing propia de la OTO no sabe que el libro llega después; la franja arriba lo dice.
     // Sin franja de preventa: el plazo no se dice en el post-pago, solo en el documento de Drive.
@@ -83,7 +84,13 @@ export async function OfferScreen(i: {
     storeName,
   });
   // Lo que ahorra, junto al precio de la primera pantalla.
-  const pct = compare ? Math.round((1 - amount / compareAt) * 100) : 0;
-  const save = compare && pct >= 5 ? `−${pct} % · ${SAVE[i.locale] ?? SAVE.en} ${fmt(Math.round((compareAt - amount) * 100) / 100)}` : null;
+  //
+  // En una SUSCRIPCION no va: ahi el precio tachado no es un precio anterior,
+  // es el de renovacion. Con $1 el primer mes y $9 despues, el badge decia
+  // «−89 % · You save $8» -- se ahorran 8 dolares UNA vez y despues se pagan
+  // los 9 igual. Era una promesa falsa en la pantalla donde se cobra.
+  const pct = compare && !i.product.subscription ? Math.round((1 - amount / compareAt) * 100) : 0;
+  const save = compare && !i.product.subscription && pct >= 5
+    ? `−${pct} % · ${SAVE[i.locale] ?? SAVE.en} ${fmt(Math.round((compareAt - amount) * 100) / 100)}` : null;
   return <OfferClient view={view} mode={i.mode} pillDetail={i.pillDetail} save={save} />;
 }
