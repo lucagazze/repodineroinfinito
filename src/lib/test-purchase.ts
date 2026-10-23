@@ -1,4 +1,5 @@
 import { randomBytes } from "crypto";
+import { incluidosDe } from "./incluidos";
 import { db, getProductById, STORE_COLS, type Product, type Store } from "./db";
 import { getRates, priceFor } from "./fx";
 import { quote } from "./pricing";
@@ -119,6 +120,20 @@ export async function finishTestRun(r: TestRun): Promise<OrderRow> {
     ...accepted.map((a) => ({ order_id: order.id, product_id: a.product.id, kind: "upsell", amount: a.amount, currency: cur })),
   ]);
   if (e2) throw new Error(`no se pudieron guardar los items: ${e2.message}`);
+
+  // Lo que cada producto entrega adentro suyo, con el MISMO helper que usan
+  // el checkout y el OTO. Si la prueba lo armara por su cuenta volveria a
+  // pasar lo de antes: el test pasando mientras la entrega real sale corta.
+  const comprados = [main.product.id, ...q.included.map((x) => x.id), ...q.bonuses.map((b) => b.product.id),
+                     ...q.lines.filter((l) => l.role === "bump").map((l) => l.product.id),
+                     ...accepted.map((a2) => a2.product.id)];
+  const dentro = await incluidosDe(f.store_id, comprados).catch(() => [] as string[]);
+  if (dentro.length) {
+    const { error: e3 } = await db.from("order_items").insert(dentro.map((id) => ({
+      order_id: order.id, product_id: id, kind: "included" as const, amount: 0, currency: cur,
+    })));
+    if (e3 && e3.code !== "23505") console.error("[prueba] incluidos:", e3.message);
+  }
 
   await sendTestMails(order.id);
   return order as OrderRow;
