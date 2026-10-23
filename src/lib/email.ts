@@ -112,7 +112,7 @@ const para = (s: string, first: string | null) =>
 
 function deliveryHtml(a: DeliveryArgs) {
   const t = T[a.locale];
-  const url = downloadHref(a.main, a.orderId) ?? "";
+  const url = downloadHref(a.main, a.orderId, a.store.domain) ?? "";
   const hero = cover(a.main);
   const legal = legalOf(a.store).name;
   const items = [a.main, ...a.extras.filter((p) => p.id !== a.main.id)];
