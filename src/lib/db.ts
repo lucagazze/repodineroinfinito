@@ -62,6 +62,8 @@ export type Product = {
   /** Preventa: se vende antes de que exista el contenido; llega en `presale_days` días (055). */
   presale?: boolean | null;
   presale_days?: number | null;
+  /** Suscripcion: no se baja, llega cada semana por mail mientras este al dia. */
+  subscription?: boolean | null;
   image_url: string | null;
   /** JPG liviano para email: Outlook no muestra WebP. */
   email_image_url: string | null;
@@ -131,7 +133,7 @@ export type Funnel = {
 };
 
 const PRODUCT_COLS =
-  "id,slug,name,short_name,description,kind,delivery_url,delivery_file,delivery_file_name,delivery_links,includes,variant_of,book_count,is_library,presale,presale_days,image_url,email_image_url,sort_order," +
+  "id,slug,name,short_name,description,kind,delivery_url,delivery_file,delivery_file_name,delivery_links,includes,variant_of,book_count,is_library,presale,presale_days,subscription,image_url,email_image_url,sort_order," +
   "product_prices(currency,amount,compare_at,display_value,stripe_price_id)";
 
 // --------------------------------------------------------------- consultas

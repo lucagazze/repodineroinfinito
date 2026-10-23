@@ -22,6 +22,10 @@ export type TyItem = {
   image: string | null;
   kind: string;
   links: { label: string; url: string }[];
+  /** Para lo que NO se baja: una suscripcion llega por mail cada semana, no
+   *  por un boton. Sin esto caia en la lista de «Incluido», junto a los bonos
+   *  gratis -- y una suscripcion de pago no esta incluida en nada. */
+  note?: string;
 };
 
 type Texts = {
@@ -223,6 +227,7 @@ export function ThankYouView(p: {
                     {i === 0 ? `↓ ${t.download}` : l.label}
                   </a>
                 ))}
+                {it.note && <p className="hint">{it.note}</p>}
                 {it.links[0] && <p className="hint">{hintOf(it.links[0].url)}</p>}
               </div>
             ))}

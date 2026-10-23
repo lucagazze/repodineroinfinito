@@ -34,7 +34,7 @@ const UA = "Mozilla/5.0 (checkout-panel diagnóstico)";
 const FOREIGN = /mitiendanube|tiendanube|hotmart|kiwify|gumroad|shopify\.com\/checkout|eduzz|monetizze/i;
 
 type FunnelRow = { id: string; store_id: string; pixel_ids: string[] | null; settings: unknown; record_sessions: boolean | null; main_product_id: string | null };
-type ProdRow = { id: string; short_name: string | null; active: boolean; delivery_url: string | null; delivery_links: { url?: string }[] | null; delivery_file: string | null; presale: boolean | null; presale_days: number | null };
+type ProdRow = { id: string; short_name: string | null; active: boolean; delivery_url: string | null; delivery_links: { url?: string }[] | null; delivery_file: string | null; presale: boolean | null; presale_days: number | null; subscription: boolean | null };
 type Price = { product_id: string; currency: string; amount: number | null };
 
 /** De a pocos a la vez: no martillar Drive ni las landings. */
@@ -150,6 +150,24 @@ export async function auditOffers(opts: { storeId?: string; offerKey?: string } 
     }
     return linkCache.get(url)!;
   };
+  /** Con que cobra cada tienda y, si es Whop, como esta su webhook.
+   *  Sin esto el control preguntaba SIEMPRE por Stripe, y una tienda que cobra
+   *  con Whop salia «Stripe sin conectar» en rojo con el cobro andando
+   *  perfecto. Un aviso que siempre esta encendido deja de mirarse. */
+  const pasarelaCache = new Map<string, Promise<{ gateway: string; whop: { webhook_id: string | null; webhook_secret_enc: string | null; last_event_at: string | null } | null }>>();
+  const pasarelaDe = (storeId: string) => {
+    if (!pasarelaCache.has(storeId)) {
+      pasarelaCache.set(storeId, (async () => {
+        const [{ data: s }, { data: w }] = await Promise.all([
+          db.from("stores").select("gateway").eq("id", storeId).maybeSingle(),
+          db.from("store_whop").select("webhook_id,webhook_secret_enc,last_event_at").eq("store_id", storeId).maybeSingle(),
+        ]);
+        return { gateway: ((s?.gateway as string | null) ?? "stripe"), whop: (w as never) ?? null };
+      })());
+    }
+    return pasarelaCache.get(storeId)!;
+  };
+
   const healthCache = new Map<string, ReturnType<typeof stripeHealth>>();
   const healthOf = (storeId: string) => {
     if (!healthCache.has(storeId)) healthCache.set(storeId, stripeHealth(storeId).catch((e) => ({ connected: true, error: (e as Error).message }) as Awaited<ReturnType<typeof stripeHealth>>));
@@ -179,12 +197,13 @@ export async function auditOffers(opts: { storeId?: string; offerKey?: string } 
     const bumpIds = mine.filter((i) => i.role === "bump").map((i) => i.product_id as string);
     const settings = resolveSettings(fr?.settings);
 
-    const [land, ck, pp, px, health, visits, orders] = await Promise.all([
+    const [land, ck, pp, px, health, pasarela, visits, orders] = await Promise.all([
       f.landing_url ? limit(() => getHtml(f.landing_url!)) : Promise.resolve(null),
       limit(() => getHtml(ckUrl)),
       postPurchaseOf(storeId, f.id, bumpIds).catch((e) => ({ error: (e as Error).message }) as const),
       pixelsFor(storeId, fr?.pixel_ids ?? []),
       healthOf(storeId),
+      pasarelaDe(storeId),
       db.from("site_events").select("id", { count: "exact", head: true }).eq("funnel_id", f.id).eq("event", "view").gte("at", since24),
       db.from("orders").select("id,capi_sent_at").eq("funnel_id", f.id).eq("status", "paid").gte("created_at", since24),
     ]);
@@ -192,7 +211,7 @@ export async function auditOffers(opts: { storeId?: string; offerKey?: string } 
     // Productos que se entregan desde este checkout: principal, incluidos, bonos, bumps y todo lo del post-pago.
     const pids = [...new Set([fr?.main_product_id, ...mine.map((i) => i.product_id as string), ...("error" in pp ? [] : pp.productIds)].filter(Boolean) as string[])];
     const [{ data: prods }, { data: prices }] = await Promise.all([
-      db.from("products").select("id,short_name,active,delivery_url,delivery_links,delivery_file,presale,presale_days").in("id", pids.length ? pids : ["00000000-0000-0000-0000-000000000000"]),
+      db.from("products").select("id,short_name,active,delivery_url,delivery_links,delivery_file,presale,presale_days,subscription").in("id", pids.length ? pids : ["00000000-0000-0000-0000-000000000000"]),
       db.from("product_prices").select("product_id,currency,amount").eq("product_id", fr?.main_product_id ?? "00000000-0000-0000-0000-000000000000"),
     ]);
 
@@ -269,8 +288,10 @@ export async function auditOffers(opts: { storeId?: string; offerKey?: string } 
     // Tampoco se oculta: pasa a su propio renglon con el plazo, para que se siga
     // viendo y se note el dia que venza.
     const sinEntrega = deliverable.filter((p) => p.active && !p.delivery_url && !p.delivery_file && !(p.delivery_links ?? []).some((l) => l?.url));
-    const noLink = sinEntrega.filter((p) => !p.presale);
+    // Y una SUSCRIPCION tampoco: se entrega como la edicion de cada semana.
+    const noLink = sinEntrega.filter((p) => !p.presale && !p.subscription);
     const enPreventa = sinEntrega.filter((p) => p.presale);
+    const suscripciones = sinEntrega.filter((p) => p.subscription && !p.presale);
     const urls = [...new Set(deliverable.flatMap((p) => [p.delivery_url, ...(p.delivery_links ?? []).map((l) => l?.url)].filter(Boolean) as string[]))];
     const res = await Promise.all(urls.map(async (u) => ({ u, ...(await checkLink(u)) })));
     const broken = res.filter((r) => !r.ok);
@@ -278,6 +299,9 @@ export async function auditOffers(opts: { storeId?: string; offerKey?: string } 
       ? { status: "bad", label: `${noLink.length} sin link`, detail: `Sin link de entrega: ${noLink.slice(0, 4).map((p) => p.short_name).join(" · ")}.` }
       : broken.length
         ? { status: "bad", label: `${broken.length} no abren`, detail: broken.slice(0, 3).map((b) => `${b.u.slice(0, 70)}: ${b.why}`).join(" · ") }
+        : suscripciones.length
+          ? { status: "ok", label: `${suscripciones.length} por suscripcion`,
+              detail: `Se entrega como la edicion de cada semana: ${suscripciones.map((p) => p.short_name).join(" · ")}.` }
         : enPreventa.length
           ? { status: "warn", label: `${enPreventa.length} en preventa`,
               detail: `Todavia sin archivo, como se vendio: ${enPreventa.slice(0, 4).map((p) => `${p.short_name} (${p.presale_days ?? "?"} dias)`).join(" · ")}.` }
@@ -287,8 +311,20 @@ export async function auditOffers(opts: { storeId?: string; offerKey?: string } 
               + (deliverable.filter((p) => p.delivery_file).length
                   ? ` ${plural(deliverable.filter((p) => p.delivery_file).length, "entrega", "entregas")} por archivo propio.` : "") };
 
-    // ---- Webhook de Stripe (de la tienda)
-    const webhook: AuditCell = !health.connected
+    // ---- El webhook de la pasarela QUE USA ESTA TIENDA.
+    // Preguntar por Stripe en una tienda que cobra con Whop daba «Stripe sin
+    // conectar» en rojo, permanente, sobre un cobro que funciona. Es el mismo
+    // error que el monitor de checkout exigiendo «pk_live_» en una pagina de
+    // Whop: un control escrito cuando solo existia Stripe.
+    const webhook: AuditCell = pasarela.gateway === "whop"
+      ? !pasarela.whop?.webhook_id || !pasarela.whop?.webhook_secret_enc
+        ? { status: "bad", label: "Whop sin webhook",
+            detail: "Sin webhook firmado los pedidos no se entregan solos." }
+        : !pasarela.whop.last_event_at || Date.now() - new Date(pasarela.whop.last_event_at).getTime() > 7 * 864e5
+          ? { status: "warn", label: "Sin eventos",
+              detail: pasarela.whop.last_event_at ? `Ultimo evento ${ago(pasarela.whop.last_event_at)}.` : "Todavia no llego ninguno." }
+          : { status: "ok", label: "Whop activo", detail: `Ultimo evento ${ago(pasarela.whop.last_event_at)}.` }
+      : !health.connected
       ? { status: "bad", label: "Stripe sin conectar" }
       : health.error
         ? { status: "bad", label: "Stripe no responde", detail: health.error }

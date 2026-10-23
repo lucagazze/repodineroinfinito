@@ -11,7 +11,7 @@ import { MetaPixel } from "@/components/MetaPixel";
 import Track from "@/components/Track";
 import { purchasePixel } from "@/lib/purchase-pixel";
 import { ThankYouView } from "./ThankYouView";
-import { kindMap, thankYouItems, thankYouTitle, SUMMARY } from "./items";
+import { kindMap, thankYouItems, thankYouTitle, SUMMARY, SUB_NOTA } from "./items";
 import { TEST_PREFIX } from "@/lib/test-purchase";
 import { PREFIJO as WHOP_PREFIX } from "@/lib/whop-events";
 
@@ -141,7 +141,10 @@ export default async function Gracias({
   const kinds = kindMap((items ?? []) as { product_id: string; kind: string }[]);
   const products = (await Promise.all([...kinds.keys()].map((id) => getProductById(id))))
     .filter((p): p is Product => !!p);
-  const { items: cards, included } = thankYouItems(products, kinds, order.id);
+  const { items: cards, included } = thankYouItems(products, kinds, order.id, {
+    sub: (p) => !!p.subscription,
+    nota: SUB_NOTA[locale] ?? SUB_NOTA.en,
+  });
 
   const ty = (store?.thankyou ?? {}) as Thankyou;
   const px = isTest ? null : await purchasePixel(order);

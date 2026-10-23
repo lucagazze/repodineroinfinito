@@ -22,7 +22,9 @@ export function kindMap(rows: { product_id: string; kind: string }[]) {
  * no tienen nada propio van a la lista de "incluido".
  * Sin pedido (simulación), un archivo propio no tiene link: queda "#".
  */
-export function thankYouItems(products: Product[], kinds: Map<string, string>, orderId: string | null) {
+export function thankYouItems(products: Product[], kinds: Map<string, string>, orderId: string | null,
+  opts: { sub?: (p: Product) => boolean; nota?: string } = {}) {
+  const { sub, nota } = opts;
   const sorted = [...products].sort((a, b) => (RANK[kinds.get(a.id) ?? ""] ?? 9) - (RANK[kinds.get(b.id) ?? ""] ?? 9));
   const items: TyItem[] = [];
   const included: string[] = [];
@@ -32,11 +34,31 @@ export function thankYouItems(products: Product[], kinds: Map<string, string>, o
       ...(main ? [{ label: p.short_name, url: main }] : []),
       ...(p.delivery_links ?? []).filter((l) => l && /^https?:\/\//.test(l.url)),
     ];
-    if (links.length) items.push({ id: p.id, slug: p.slug, name: p.short_name, image: p.image_url, kind: kinds.get(p.id) ?? "main", links });
+    const base = { id: p.id, slug: p.slug, name: p.short_name, image: p.image_url, kind: kinds.get(p.id) ?? "main" };
+    if (links.length) items.push({ ...base, links });
+    // Una suscripcion no tiene boton y no esta «incluida»: se cobra aparte y
+    // llega por mail. Va como renglon propio con lo que pasa ahora, en vez de
+    // aparecer sin nada al lado -- que, justo despues de pagar, parece roto.
+    else if (sub?.(p)) items.push({ ...base, links: [], note: nota ?? "" });
     else included.push(p.short_name);
   }
   return { items, included };
 }
+
+/**
+ * Lo que se le dice al que acaba de pagar la suscripcion. No hay boton: la
+ * entrega es el correo del domingo. Vale cualquier dia de la semana a
+ * proposito -- «este domingo» seria mentira para el que compra un domingo de
+ * noche.
+ */
+export const SUB_NOTA: Record<Locale, string> = {
+  en: "No download — it arrives by email every Sunday. Your first issue is the next one out.",
+  es: "No se descarga: llega por mail cada domingo. Tu primera edicion es la proxima que sale.",
+  it: "Niente download: arriva via email ogni domenica. La tua prima edizione e la prossima.",
+  "pt-BR": "Nao tem download: chega por e-mail todo domingo. Sua primeira edicao e a proxima.",
+  fr: "Pas de telechargement : elle arrive par e-mail chaque dimanche. Votre premiere edition est la prochaine.",
+  de: "Kein Download - sie kommt jeden Sonntag per E-Mail. Ihre erste Ausgabe ist die naechste.",
+};
 
 export const SUMMARY: Record<Locale, { title: string; total: string; free: string }> = {
   it: { title: "Riepilogo dell'ordine", total: "Totale", free: "Incluso" },
