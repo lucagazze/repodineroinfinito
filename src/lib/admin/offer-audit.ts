@@ -34,7 +34,7 @@ const UA = "Mozilla/5.0 (checkout-panel diagnóstico)";
 const FOREIGN = /mitiendanube|tiendanube|hotmart|kiwify|gumroad|shopify\.com\/checkout|eduzz|monetizze/i;
 
 type FunnelRow = { id: string; store_id: string; pixel_ids: string[] | null; settings: unknown; record_sessions: boolean | null; main_product_id: string | null };
-type ProdRow = { id: string; short_name: string | null; active: boolean; delivery_url: string | null; delivery_links: { url?: string }[] | null; delivery_file: string | null; presale: boolean | null; presale_days: number | null; subscription: boolean | null };
+type ProdRow = { id: string; slug: string; short_name: string | null; active: boolean; delivery_url: string | null; delivery_links: { url?: string }[] | null; delivery_file: string | null; presale: boolean | null; presale_days: number | null; subscription: boolean | null };
 type Price = { product_id: string; currency: string; amount: number | null };
 
 /** De a pocos a la vez: no martillar Drive ni las landings. */
@@ -211,7 +211,7 @@ export async function auditOffers(opts: { storeId?: string; offerKey?: string } 
     // Productos que se entregan desde este checkout: principal, incluidos, bonos, bumps y todo lo del post-pago.
     const pids = [...new Set([fr?.main_product_id, ...mine.map((i) => i.product_id as string), ...("error" in pp ? [] : pp.productIds)].filter(Boolean) as string[])];
     const [{ data: prods }, { data: prices }] = await Promise.all([
-      db.from("products").select("id,short_name,active,delivery_url,delivery_links,delivery_file,presale,presale_days,subscription").in("id", pids.length ? pids : ["00000000-0000-0000-0000-000000000000"]),
+      db.from("products").select("id,slug,short_name,active,delivery_url,delivery_links,delivery_file,presale,presale_days,subscription").in("id", pids.length ? pids : ["00000000-0000-0000-0000-000000000000"]),
       db.from("product_prices").select("product_id,currency,amount").eq("product_id", fr?.main_product_id ?? "00000000-0000-0000-0000-000000000000"),
     ]);
 
@@ -289,6 +289,18 @@ export async function auditOffers(opts: { storeId?: string; offerKey?: string } 
     // viendo y se note el dia que venza.
     const sinEntrega = deliverable.filter((p) => p.active && !p.delivery_url && !p.delivery_file && !(p.delivery_links ?? []).some((l) => l?.url));
     // Y una SUSCRIPCION tampoco: se entrega como la edicion de cada semana.
+    // Una variante comparte el short_name con su base (el trial de la
+    // suscripcion se llama igual que la suscripcion), asi que la lista salia
+    // «The Weekly Screen · The Weekly Screen» y se leia como un duplicado.
+    // Cuando el nombre se repite, se aclara con el slug.
+    const nombres = (ps: ProdRow[]) => {
+      const veces = new Map<string, number>();
+      for (const p of ps) veces.set(p.short_name ?? p.slug, (veces.get(p.short_name ?? p.slug) ?? 0) + 1);
+      return ps.map((p) => {
+        const n = p.short_name ?? p.slug;
+        return (veces.get(n) ?? 0) > 1 ? `${n} (${p.slug})` : n;
+      });
+    };
     const noLink = sinEntrega.filter((p) => !p.presale && !p.subscription);
     const enPreventa = sinEntrega.filter((p) => p.presale);
     const suscripciones = sinEntrega.filter((p) => p.subscription && !p.presale);
@@ -296,15 +308,18 @@ export async function auditOffers(opts: { storeId?: string; offerKey?: string } 
     const res = await Promise.all(urls.map(async (u) => ({ u, ...(await checkLink(u)) })));
     const broken = res.filter((r) => !r.ok);
     const delivery: AuditCell = noLink.length
-      ? { status: "bad", label: `${noLink.length} sin link`, detail: `Sin link de entrega: ${noLink.slice(0, 4).map((p) => p.short_name).join(" · ")}.` }
+      ? { status: "bad", label: `${noLink.length} sin link`, detail: `Sin link de entrega: ${nombres(noLink.slice(0, 4)).join(" · ")}.` }
       : broken.length
         ? { status: "bad", label: `${broken.length} no abren`, detail: broken.slice(0, 3).map((b) => `${b.u.slice(0, 70)}: ${b.why}`).join(" · ") }
         : suscripciones.length
           ? { status: "ok", label: `${suscripciones.length} por suscripcion`,
-              detail: `Se entrega como la edicion de cada semana: ${suscripciones.map((p) => p.short_name).join(" · ")}.` }
+              detail: `Se entrega como la edicion de cada semana: ${nombres(suscripciones).join(" · ")}.` }
         : enPreventa.length
           ? { status: "warn", label: `${enPreventa.length} en preventa`,
-              detail: `Todavia sin archivo, como se vendio: ${enPreventa.slice(0, 4).map((p) => `${p.short_name} (${p.presale_days ?? "?"} dias)`).join(" · ")}.` }
+              detail: `Todavia sin archivo, como se vendio: ${(() => {
+                const ps = enPreventa.slice(0, 4), ns = nombres(ps);
+                return ps.map((p, i) => `${ns[i]} (${p.presale_days ?? "?"} dias)`).join(" · ");
+              })()}.` }
         : { status: "ok", label: res.length ? `${res.length} abren` : `${deliverable.length} con archivo`,
             detail: `${plural(deliverable.length, "producto", "productos")} (checkout y post-pago). `
               + (res.length ? `${plural(res.length, "link", "links")} de entrega: todos abren.` : "")
