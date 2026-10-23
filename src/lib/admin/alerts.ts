@@ -12,14 +12,14 @@ import { queuePush } from "@/lib/push";
  * Productos activos que se venden o se entregan sin link de entrega
  * («missing_link»): avisa los que faltan y cierra los que ya lo tienen.
  */
-export async function syncMissingLinks(storeId: string, missing: { id: string; name: string; link: string }[], fine: string[]) {
+export async function syncMissingLinks(storeId: string, missing: { id: string; name: string; link: string; body?: string }[], fine: string[]) {
   try {
     const now = new Date().toISOString();
     if (missing.length) {
       await db.from("alerts").upsert(missing.map((p) => ({
         store_id: storeId, kind: "missing_link", severity: "warn", ref_id: p.id, resolved_at: null,
         title: `Falta el link de entrega: ${p.name}`,
-        body: "Se vende (o va dentro de una compra) y no tiene delivery_url, delivery_links ni archivo propio: el mail de entrega sale sin botón de descarga. Cargarlo con upsert_product.",
+        body: p.body ?? "Se vende (o va dentro de una compra) y no tiene delivery_url, delivery_links ni archivo propio: el mail de entrega sale sin botón de descarga. Cargarlo con upsert_product.",
         link: p.link,
       })), { onConflict: "kind,ref_id" });
     }

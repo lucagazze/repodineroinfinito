@@ -38,9 +38,10 @@ type Prod = {
   id: string; slug: string; short_name: string; name: string; description: string | null; kind: string; active: boolean;
   image_url: string | null; email_image_url: string | null; delivery_url: string | null; delivery_file: string | null;
   delivery_links?: { url?: string }[] | null;
+  presale?: boolean | null; presale_days?: number | null; subscription?: boolean | null;
   variant_of?: string | null; product_prices: { currency: string; amount: number | string | null; compare_at: number | string | null }[] | null;
 };
-const PCOLS = "id,slug,short_name,name,description,kind,active,image_url,email_image_url,delivery_url,delivery_file,delivery_links,product_prices(currency,amount,compare_at)";
+const PCOLS = "id,slug,short_name,name,description,kind,active,image_url,email_image_url,delivery_url,delivery_file,delivery_links,presale,presale_days,subscription,product_prices(currency,amount,compare_at)";
 
 /** Pasos del post-pago de cada cadena: OTO 1..3 por nivel (migración 021) o, en cadenas viejas, por orden. */
 async function ppSteps(ids: string[]) {
@@ -158,8 +159,36 @@ async function ProductsSection({ sc }: { sc: Scope }) {
   // Después de responder (after): son escrituras en avisos y no tienen por qué demorar la tabla.
   const deliverable = (p: Prod) => tags(p.id).some((t) => t.key !== "bonus");
   const lacks = (p: Prod) => !p.delivery_url && !p.delivery_file && !extraLinks(p);
-  const missing = used.filter((p) => p.active && deliverable(p) && lacks(p)).map((p) => ({ id: p.id, name: p.short_name, link: `${base}/${p.id}` }));
-  const fine = used.filter((p) => !lacks(p) || !p.active).map((p) => p.id);
+  // Una suscripcion nunca tiene link: se entrega como la edicion de cada
+  // semana. Una preventa todavia no lo tiene y eso es lo prometido -- pero
+  // deja de ser normal cuando a la compra mas vieja se le vencio el plazo:
+  // ahi hay alguien esperando un archivo que no existe, y eso si se avisa.
+  const vencidas = new Set(
+    (await db.from("order_items")
+      .select("product_id,orders!inner(created_at,status)")
+      .in("product_id", used.filter((p) => p.presale && lacks(p)).map((p) => p.id))
+      .eq("orders.status", "paid")
+      .then((r) => (r.data ?? []) as unknown as { product_id: string; orders: { created_at: string } | { created_at: string }[] }[]))
+      .filter((r) => {
+        const o = Array.isArray(r.orders) ? r.orders[0] : r.orders;
+        if (!o) return false;
+        const dias = (Date.now() - new Date(o.created_at).getTime()) / 86_400_000;
+        const plazo = used.find((p) => p.id === r.product_id)?.presale_days ?? 0;
+        return dias > plazo;
+      })
+      .map((r) => r.product_id)
+  );
+  const falta = (p: Prod) => lacks(p) && !p.subscription && (!p.presale || vencidas.has(p.id));
+  const missing = used.filter((p) => p.active && deliverable(p) && falta(p))
+    .map((p) => ({
+      id: p.id, name: p.short_name, link: `${base}/${p.id}`,
+      // La preventa vencida es un aviso distinto: no es que falte cargarlo, es
+      // que ya hay alguien esperandolo.
+      body: p.presale
+        ? `Se vendio en preventa con ${p.presale_days} dias de plazo y el plazo ya paso: hay compras esperando el archivo y todavia no hay ninguno. Cargarlo con upsert_product.`
+        : undefined,
+    }));
+  const fine = used.filter((p) => !falta(p) || !p.active).map((p) => p.id);
   after(() => syncMissingLinks(store.id, missing, fine));
 
   return products.length ? (
