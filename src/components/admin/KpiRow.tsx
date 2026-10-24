@@ -60,9 +60,9 @@ export function MoneyRow({ initial, label, query, live }: {
   const cells: Cell[] = [
     { key: "gross", label: `Facturado · ${label}`, value: usd(m.gross),
       hint: m.orders ? `${m.orders.toLocaleString("es-AR")} ${m.orders === 1 ? "compra" : "compras"} · AOV ${usd(m.gross / m.orders)}` : "Sin cobros" },
-    { key: "fees", label: "Comisiones", value: minus(m.fees), hint: m.feesSource === "real" ? "Stripe, las cobradas" : m.feesSource === "mixed" ? "Stripe, en parte estimadas" : "Stripe, estimadas" },
+    { key: "fees", label: "Comisiones", value: minus(m.fees), hint: m.feesSource === "real" ? "de la pasarela, las cobradas" : m.feesSource === "mixed" ? "de la pasarela, alguna venta sin neto" : "de la pasarela, estimadas" },
     { key: "refunded", label: "Reembolsos", value: minus(m.refunded), hint: m.refunds ? `${m.refunds} ${m.refunds === 1 ? "pedido" : "pedidos"}` : "Ninguno" },
-    { key: "net", label: "Neto", value: usd(m.net), hint: "Lo que deposita Stripe" },
+    { key: "net", label: "Neto", value: usd(m.net), hint: "lo que queda tras comisiones" },
     { key: "spend", label: "Gasto en anuncios", value: m.spend == null ? "—" : minus(m.spend),
       hint: m.spend == null ? "Sin campañas vinculadas"
         : (m.unlinkedSpend ?? 0) >= 1 ? `incluye ${usd(m.unlinkedSpend)} de ${m.unlinkedCampaigns} ${m.unlinkedCampaigns === 1 ? "campaña" : "campañas"} sin oferta`

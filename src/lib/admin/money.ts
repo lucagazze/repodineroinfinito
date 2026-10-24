@@ -94,11 +94,55 @@ export async function moneyDetail(since: string, until: string): Promise<{ money
     if (!data || data.length < 1000) break;
   }
 
+  // ----------------------------------------------------------------- Whop
+  //
+  // Hasta aca todo salio de stripe_balance_txns. Las tiendas que cobran con
+  // Whop no aparecen ahi, asi que el panel mostraba US$ 0 con ventas reales
+  // entrando: el dueño veia «Sin cobros» y un beneficio negativo que era solo
+  // el gasto de Meta. Physics y Finance pasaron a Whop y toda su plata era
+  // invisible.
+  //
+  // Whop no da un libro mayor como el balance de Stripe, asi que la fuente es
+  // la tabla de pedidos, que es la que la app llena cuando el webhook entrega:
+  //   amount_total  lo cobrado, en la moneda del comprador
+  //   net_amount    lo que queda despues de la comision, cuando Whop lo informa
+  //   amount_refunded / refunded_at  las devoluciones
+  // La comision se DERIVA (cobrado - neto) en vez de estimarse con un
+  // porcentaje: un numero inventado en una fila de «Comisiones» es peor que
+  // ninguno. Si Whop no mando el neto, esa venta suma al bruto y no a la
+  // comision, y feesSource baja a "mixed" para que el panel lo diga.
+  let whopVentas = 0, sinNeto = 0;
+  for (let i = 0; storeIds.length; i += 1000) {
+    const { data, error } = await db.from("orders")
+      .select("store_id,currency,amount_total,net_amount,amount_refunded,refunded_at,created_at,status,is_test")
+      .in("store_id", storeIds).eq("provider", "whop").eq("status", "paid").eq("is_test", false)
+      .gte("created_at", from).lt("created_at", to)
+      .order("created_at").range(i, i + 999);
+    if (error) throw new Error(`orders (whop): ${error.message}`);
+    for (const o of data ?? []) {
+      const dia = dayOf(new Date(o.created_at as string), PANEL_TZ);
+      const d = (byDay[dia] ??= { gross: 0, orders: 0, fees: 0, refunded: 0 });
+      const a = usd(o.amount_total, o.currency);
+      gross += a; orders++; charges++; whopVentas++;
+      d.gross += a; d.orders++;
+      const neto = o.net_amount == null ? null : usd(o.net_amount, o.currency);
+      if (neto == null) sinNeto++;
+      else { const f = Math.max(0, a - neto); fees += f; d.fees += f; }
+      const dev = usd(o.amount_refunded, o.currency);
+      if (dev > 0) { refunded += dev; d.refunded += dev; if (o.refunded_at) refunds++; }
+    }
+    if (!data || data.length < 1000) break;
+  }
+
   const spend = meta.fetchedAt != null || meta.cur.spend > 0 ? meta.cur.spend : null;
   const campaigns = Object.values(meta.byCampaign).filter((n) => n.spend > 0).length;
   const net = gross - fees - refunded;
   const money: Money = {
-    since, until, orders, charges, gross, fees, feesSource: "real", refunded, refunds, net,
+    // "mixed" cuando alguna venta de Whop llego sin su neto: ahi la comision
+    // de esa venta no se puede derivar y el total queda corto. El panel lo
+    // dice en vez de presentar un numero incompleto como si fuera exacto.
+    since, until, orders, charges, gross, fees,
+    feesSource: sinNeto > 0 ? "mixed" : "real", refunded, refunds, net,
     spend, campaigns, idleSpend: 0, unlinkedSpend: 0, unlinkedCampaigns: 0, profit: net - (spend ?? 0),
   };
 

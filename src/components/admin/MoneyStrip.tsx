@@ -24,7 +24,7 @@ const FLOW: Def[] = [
   { k: "gross", label: "Cobrado", icon: DollarSign, kind: "money", better: 1, info: "Lo cobrado en Stripe en el período: el principal, los bumps y los OTOs, antes de comisiones y reembolsos." },
   { k: "fees", label: "Comisiones", icon: Landmark, kind: "money", better: -1, info: "Lo que se queda Stripe de cada cobro (las comisiones reales de tus cuentas; si alguna todavía no llegó, estimada)." },
   { k: "refunded", label: "Reembolsos", icon: RotateCcw, kind: "money", better: -1, info: "Lo devuelto a los compradores de los pedidos del período." },
-  { k: "net", label: "Neto", icon: Wallet, kind: "money", better: 1, info: "Cobrado − comisiones − reembolsos: lo que deposita Stripe." },
+  { k: "net", label: "Neto", icon: Wallet, kind: "money", better: 1, info: "Cobrado − comisiones − reembolsos: lo que queda tras la pasarela." },
   { k: "spend", label: "Gasto Meta", icon: Receipt, kind: "money", better: -1, info: "Lo gastado por las campañas que mandan a estas ofertas, desde que cada oferta vende acá (no toda la cuenta publicitaria)." },
   { k: "profit", label: "Te queda", icon: Coins, kind: "money", better: 1, strong: true, info: "Neto − gasto en Meta: lo que te queda de verdad." },
 ];
