@@ -60,7 +60,7 @@ export function MoneyRow({ initial, label, query, live }: {
   const cells: Cell[] = [
     { key: "gross", label: `Facturado · ${label}`, value: usd(m.gross),
       hint: m.orders ? `${m.orders.toLocaleString("es-AR")} ${m.orders === 1 ? "compra" : "compras"} · AOV ${usd(m.gross / m.orders)}` : "Sin cobros" },
-    { key: "fees", label: "Comisiones", value: minus(m.fees), hint: m.feesSource === "real" ? "de la pasarela, las cobradas" : m.feesSource === "mixed" ? "de la pasarela, alguna venta sin neto" : "de la pasarela, estimadas" },
+    { key: "fees", label: "Comisiones", value: minus(m.fees), hint: m.feesSource === "real" ? "de la pasarela, las cobradas" : m.feesSource === "mixed" ? "incompletas: hay ventas sin su neto" : "de la pasarela, estimadas" },
     { key: "refunded", label: "Reembolsos", value: minus(m.refunded), hint: m.refunds ? `${m.refunds} ${m.refunds === 1 ? "pedido" : "pedidos"}` : "Ninguno" },
     { key: "net", label: "Neto", value: usd(m.net), hint: "lo que queda tras comisiones" },
     { key: "spend", label: "Gasto en anuncios", value: m.spend == null ? "—" : minus(m.spend),

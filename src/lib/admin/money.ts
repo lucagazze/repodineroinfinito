@@ -94,16 +94,22 @@ export async function moneyDetail(since: string, until: string): Promise<{ money
     if (!data || data.length < 1000) break;
   }
 
-  // ----------------------------------------------------------------- Whop
+  // ------------------------------------------------- todo lo que no es Stripe
   //
-  // Hasta aca todo salio de stripe_balance_txns. Las tiendas que cobran con
-  // Whop no aparecen ahi, asi que el panel mostraba US$ 0 con ventas reales
+  // Hasta aca todo salio de stripe_balance_txns. Las tiendas que no cobran con
+  // Stripe no aparecen ahi, asi que el panel mostraba US$ 0 con ventas reales
   // entrando: el dueño veia «Sin cobros» y un beneficio negativo que era solo
   // el gasto de Meta. Physics y Finance pasaron a Whop y toda su plata era
   // invisible.
   //
-  // Whop no da un libro mayor como el balance de Stripe, asi que la fuente es
-  // la tabla de pedidos, que es la que la app llena cuando el webhook entrega:
+  // El filtro es «provider != stripe» y no «provider == whop» a proposito: asi
+  // entra tambien el historico importado de plataformas anteriores y cualquier
+  // pasarela futura, sin volver a tocar este archivo. Los pedidos de Stripe
+  // quedan fuera porque ya los trajo el libro mayor de arriba; contarlos aqui
+  // los duplicaria.
+  //
+  // Fuera de Stripe no hay libro mayor, asi que la fuente es la tabla de
+  // pedidos, que es la que la app llena cuando el webhook entrega:
   //   amount_total  lo cobrado, en la moneda del comprador
   //   net_amount    lo que queda despues de la comision, cuando Whop lo informa
   //   amount_refunded / refunded_at  las devoluciones
@@ -111,25 +117,59 @@ export async function moneyDetail(since: string, until: string): Promise<{ money
   // porcentaje: un numero inventado en una fila de «Comisiones» es peor que
   // ninguno. Si Whop no mando el neto, esa venta suma al bruto y no a la
   // comision, y feesSource baja a "mixed" para que el panel lo diga.
-  let whopVentas = 0, sinNeto = 0;
+  let sinNeto = 0;
   for (let i = 0; storeIds.length; i += 1000) {
     const { data, error } = await db.from("orders")
       .select("store_id,currency,amount_total,net_amount,amount_refunded,refunded_at,created_at,status,is_test")
-      .in("store_id", storeIds).eq("provider", "whop").eq("status", "paid").eq("is_test", false)
+      .in("store_id", storeIds).neq("provider", "stripe").eq("status", "paid").eq("is_test", false)
       .gte("created_at", from).lt("created_at", to)
       .order("created_at").range(i, i + 999);
-    if (error) throw new Error(`orders (whop): ${error.message}`);
+    if (error) throw new Error(`orders (sin Stripe): ${error.message}`);
     for (const o of data ?? []) {
       const dia = dayOf(new Date(o.created_at as string), PANEL_TZ);
       const d = (byDay[dia] ??= { gross: 0, orders: 0, fees: 0, refunded: 0 });
       const a = usd(o.amount_total, o.currency);
-      gross += a; orders++; charges++; whopVentas++;
+      gross += a; orders++; charges++;
       d.gross += a; d.orders++;
       const neto = o.net_amount == null ? null : usd(o.net_amount, o.currency);
       if (neto == null) sinNeto++;
       else { const f = Math.max(0, a - neto); fees += f; d.fees += f; }
       const dev = usd(o.amount_refunded, o.currency);
       if (dev > 0) { refunded += dev; d.refunded += dev; if (o.refunded_at) refunds++; }
+    }
+    if (!data || data.length < 1000) break;
+  }
+
+  // ------------------------------------------- el historico de la plataforma anterior
+  //
+  // Las ventas que se hicieron antes de la app entran por «Ventas realizadas →
+  // Exportar XLSX» de la plataforma vieja y viven en mkt_import_orders, con su
+  // numero de orden como clave para que reimportar no duplique. Hasta ahora
+  // solo alimentaban los contactos de marketing: la plata quedaba fuera del
+  // panel, asi que la historia del negocio empezaba el dia que se conecto la
+  // pasarela nueva.
+  //
+  // DE ESE HISTORICO NO HAY COMISION. El export trae lo cobrado, no lo que la
+  // plataforma se quedo. Esas ventas suman al bruto y NO a la comision, y por
+  // eso marcan `sinNeto`: el panel dice que la cifra de comisiones esta
+  // incompleta en vez de dejar creer que el neto de ese periodo es el que se
+  // deposito de verdad.
+  //
+  // `usd` ya viene convertido por el importador, asi que aqui no se vuelve a
+  // aplicar el tipo de cambio: hacerlo lo convertiria dos veces.
+  for (let i = 0; storeIds.length; i += 1000) {
+    const { data, error } = await db.from("mkt_import_orders")
+      .select("store_id,ordered_at,usd,status")
+      .in("store_id", storeIds).gte("ordered_at", from).lt("ordered_at", to)
+      .order("ordered_at").range(i, i + 999);
+    if (error) throw new Error(`mkt_import_orders: ${error.message}`);
+    for (const h of data ?? []) {
+      const dia = dayOf(new Date(h.ordered_at as string), PANEL_TZ);
+      const d = (byDay[dia] ??= { gross: 0, orders: 0, fees: 0, refunded: 0 });
+      const a = Number(h.usd) || 0;
+      if (h.status === "refunded") { refunded += a; refunds++; d.refunded += a; }
+      gross += a; orders++; charges++; sinNeto++;
+      d.gross += a; d.orders++;
     }
     if (!data || data.length < 1000) break;
   }
