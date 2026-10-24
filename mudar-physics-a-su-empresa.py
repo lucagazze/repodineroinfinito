@@ -165,8 +165,26 @@ console.log(JSON.stringify(await connectWhop("{PHYSICS}", process.env.K!, proces
     plista = pl.get("data", pl) if isinstance(pl, dict) else pl
     prod_whop = (plista[0]["product"]["id"] if plista and isinstance(plista[0], dict) and plista[0].get("product") else None)
     if not prod_whop:
-        print("\n  OJO: no encuentro un producto en la cuenta nueva donde colgar los planes.")
-        print("  Crea un producto cualquiera en Whop y volve a correr esto: la conexion ya quedo guardada.\n")
+        print("  La cuenta nueva no tiene productos todavia. Creo uno para colgar los planes...")
+        for ruta, cuerpo in (
+            ("/products", {"account_id": biz, "name": "Physics Study Lab", "visibility": "hidden"}),
+            ("/access_passes", {"account_id": biz, "title": "Physics Study Lab", "visibility": "hidden"}),
+        ):
+            r = whop(api_key, ruta, "POST", cuerpo)
+            if "_error" not in r and r.get("id"):
+                prod_whop = r["id"]
+                print(f"    producto creado: {prod_whop}")
+                break
+            print(f"    {ruta}: HTTP {r.get('_error')} {str(r.get('_body',''))[:90]}")
+    if not prod_whop:
+        print("""
+  No pude crear el producto por API. La conexion YA quedo guardada y el
+  checkout principal cobra bien; lo que falta son los planes de los OTO.
+
+  Entra a Whop (empresa Physics Study Lab) -> Productos -> crea uno cualquiera,
+  y volve a correr este script: va a saltear lo ya hecho y solo rehacer los
+  planes.
+""")
         return
     viejos = []
     for p in prods:
