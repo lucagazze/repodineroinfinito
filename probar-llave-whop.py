@@ -50,8 +50,15 @@ if c == 401:
      crear una nueva, y copiarla entera con el boton de copiar (no a mano).
 """)
     sys.exit()
-if c == 403 or (c == 400 and "permission" in str(d).lower()):
-    print(f"     La llave es VALIDA pero le FALTAN PERMISOS sobre {biz} ({c}).")
+if c == 403 or (c == 400 and "permission" in str(d).lower()) or "scope" in str(d).lower():
+    import re as _re
+    falta = _re.findall(r"for the ([a-z_:]+) scope", str(d))
+    print(f"     La llave es VALIDA pero le FALTA UN PERMISO sobre {biz} ({c}).")
+    if falta:
+        print(f"\n     >>> EL PERMISO QUE FALTA SE LLAMA:  {falta[0]}")
+        print(f"         Buscá «{falta[0].split(':')[0]}» en el buscador de permisos de Whop.\n")
+    else:
+        print(f"     Whop dijo: {str(d)[:160]}")
     print("""     Casi siempre es eso, no la empresa: la comprobacion de abajo dice
      de cual es. Si la empresa es la correcta, editá la llave en Whop
      (Desarrollador -> API keys) y dale el rol de acceso completo, o al

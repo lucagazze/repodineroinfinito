@@ -28,12 +28,29 @@ export async function connectWhop(
 ) {
   // La llave tiene que servir ANTES de guardarla: una llave invalida guardada
   // se descubre con la primera venta, que es el peor momento posible.
-  const r = await fetch(`${API}/webhooks?account_id=${encodeURIComponent(companyId)}`, {
+  //
+  // Se prueba con /webhooks, pero ese permiso (developer:manage_webhook) NO lo
+  // usa el checkout: cobra con /payments y el post-pago lee /plans. Una llave
+  // perfectamente buena para cobrar puede no tenerlo, asi que un 403 sobre ese
+  // scope cae a /plans en vez de rechazarla -- rechazarla dejaria la tienda sin
+  // poder cobrar por un permiso que no necesita.
+  const cuenta = encodeURIComponent(companyId);
+  const r = await fetch(`${API}/webhooks?account_id=${cuenta}`, {
     headers: { authorization: `Bearer ${apiKey}` },
   });
   if (!r.ok) {
     const t = await r.text();
-    throw new Error(`La llave no sirve para la cuenta ${companyId}: HTTP ${r.status} ${t.slice(0, 160)}`);
+    const soloWebhooks = r.status === 403 && /webhook/i.test(t);
+    if (!soloWebhooks) {
+      throw new Error(`La llave no sirve para la cuenta ${companyId}: HTTP ${r.status} ${t.slice(0, 160)}`);
+    }
+    const r2 = await fetch(`${API}/plans?account_id=${cuenta}&limit=1`, {
+      headers: { authorization: `Bearer ${apiKey}` },
+    });
+    if (!r2.ok) {
+      const t2 = await r2.text();
+      throw new Error(`La llave no sirve para la cuenta ${companyId}: HTTP ${r2.status} ${t2.slice(0, 160)}`);
+    }
   }
 
   // De paso, de quien es la llave.
