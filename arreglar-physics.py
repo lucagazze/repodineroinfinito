@@ -193,8 +193,9 @@ console.log(JSON.stringify(await connectWhop("{PHYSICS}", process.env.K!, "{BIZ}
                  and isinstance(plista[0].get("product"), dict) else None)
     if not prod_whop:
         print("  La cuenta no tiene productos todavia. Creo uno para colgar los planes...")
-        for ruta, cuerpo in (("/products", {"account_id": BIZ, "name": "Physics Study Lab", "visibility": "hidden"}),
-                             ("/access_passes", {"account_id": BIZ, "title": "Physics Study Lab", "visibility": "hidden"})):
+        # El campo es "title". Con "name" Whop contesta 400 "Title can't be blank",
+        # y /access_passes no existe en la v1 (404).
+        for ruta, cuerpo in (("/products", {"account_id": BIZ, "title": "Physics Study Lab", "visibility": "hidden"}),):
             r = whop(k, ruta, "POST", cuerpo)
             if "_error" not in r and r.get("id"):
                 prod_whop = r["id"]; print(f"    producto creado: {prod_whop}"); break

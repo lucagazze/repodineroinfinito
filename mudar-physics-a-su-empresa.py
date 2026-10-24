@@ -166,9 +166,11 @@ console.log(JSON.stringify(await connectWhop("{PHYSICS}", process.env.K!, proces
     prod_whop = (plista[0]["product"]["id"] if plista and isinstance(plista[0], dict) and plista[0].get("product") else None)
     if not prod_whop:
         print("  La cuenta nueva no tiene productos todavia. Creo uno para colgar los planes...")
+        # El campo es "title". Con "name" Whop contesta 400 "Title can't be
+        # blank", y /access_passes no existe en la v1 (404). Eso dejo la
+        # mudanza de Physics a medias: conexion guardada y planes sin rehacer.
         for ruta, cuerpo in (
-            ("/products", {"account_id": biz, "name": "Physics Study Lab", "visibility": "hidden"}),
-            ("/access_passes", {"account_id": biz, "title": "Physics Study Lab", "visibility": "hidden"}),
+            ("/products", {"account_id": biz, "title": "Physics Study Lab", "visibility": "hidden"}),
         ):
             r = whop(api_key, ruta, "POST", cuerpo)
             if "_error" not in r and r.get("id"):
