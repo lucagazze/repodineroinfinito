@@ -1,6 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { metaGet, metaPost } from "@/lib/admin/meta-conn";
 import { defineTool, getStore, storeArg, UserError } from "./util";
 
 /**
@@ -26,6 +27,63 @@ async function offerOf(store: string, slug: string) {
 }
 
 const COLS = "id,title,kind,drive_file_id,url,thumbnail_url,language,angle,status,meta_ad_ids,notes,sort_order,funnel_id,created_at";
+
+/**
+ * Las campañas de Meta enganchadas a los embudos de una oferta.
+ *
+ * Es el limite de todo lo que sigue: una campaña que no esta declarada acá no
+ * existe para estas herramientas, asi que no se puede apagar por error un
+ * anuncio de otra marca de la misma cuenta publicitaria. Physics y Finance
+ * comparten cuenta, con lo cual esto no es teorico.
+ */
+async function campaignsOf(offerId: string): Promise<string[]> {
+  const { data } = await db.from("funnels").select("meta_campaign_ids").eq("offer_id", offerId);
+  const ids = new Set<string>();
+  for (const f of (data ?? []) as { meta_campaign_ids: string[] | null }[]) {
+    for (const id of f.meta_campaign_ids ?? []) if (id) ids.add(String(id));
+  }
+  return [...ids];
+}
+
+type AdLive = {
+  id: string; name: string; status: string; effective_status: string; campaign_id: string;
+  spend?: number; purchases?: number; cpa?: number | null; ctr?: number;
+};
+
+/**
+ * Los anuncios de una campaña. Con `conNumeros` suma el rendimiento de los
+ * ultimos 7 dias; sin el es una sola llamada, que es lo que necesita
+ * set_ad_status para resolver nombres.
+ */
+async function adsDe(campaignId: string, conNumeros = true): Promise<AdLive[]> {
+  const base = await metaGet<{ data?: { id: string; name: string; status: string; effective_status: string }[] }>(
+    `${campaignId}/ads`, { fields: "id,name,status,effective_status", limit: "100" },
+  );
+  const filas: AdLive[] = (base.data ?? []).map((a) => ({ ...a, campaign_id: campaignId }));
+  if (!conNumeros || !filas.length) return filas;
+
+  const ins = await metaGet<{ data?: Record<string, unknown>[] }>(`${campaignId}/insights`, {
+    level: "ad", date_preset: "last_7d", limit: "100",
+    fields: "ad_id,spend,ctr,actions,cost_per_action_type",
+  }).catch(() => ({ data: [] as Record<string, unknown>[] }));
+
+  const ESCOMPRA = (t: unknown) => t === "purchase" || t === "omni_purchase";
+  for (const r of ins.data ?? []) {
+    const fila = filas.find((f) => f.id === r.ad_id);
+    if (!fila) continue;
+    const acciones = (r.actions ?? []) as { action_type: string; value: string }[];
+    const costos = (r.cost_per_action_type ?? []) as { action_type: string; value: string }[];
+    fila.spend = Number(r.spend) || 0;
+    fila.ctr = Number(r.ctr) || 0;
+    fila.purchases = Number(acciones.find((a) => ESCOMPRA(a.action_type))?.value ?? 0);
+    const cpa = costos.find((a) => ESCOMPRA(a.action_type))?.value;
+    // Preferir el CPA de Meta; si no viene, derivarlo. Nunca dividir por cero.
+    fila.cpa = cpa != null ? Number(cpa) : fila.purchases ? fila.spend / fila.purchases : null;
+  }
+  // Sin gasto no hay numeros: dejarlos en 0 miente menos que dejarlos sin definir.
+  for (const f of filas) { f.spend ??= 0; f.purchases ??= 0; f.ctr ??= 0; f.cpa ??= null; }
+  return filas;
+}
 
 export function registerAdsTools(server: McpServer) {
   defineTool(server, "list_ad_creatives", {
@@ -149,6 +207,94 @@ export function registerAdsTools(server: McpServer) {
       if (error) throw new Error(error.message);
       if (!data?.length) throw new UserError(`Creative ${id} not found in offer ${offer}.`);
       return { deleted: data[0] };
+    },
+  });
+
+  // ---------------------------------------------------------------- Meta vivo
+  //
+  // Las dos de abajo hablan con Meta, no con la base. Existen porque apagar un
+  // anuncio que gasta sin vender era lo unico del circuito que seguia saliendo
+  // del panel: habia que entrar a Ads Manager a mano. Un anuncio con buen CTR
+  // y cero compras quema presupuesto en silencio, y el dueño se entera al
+  // final de la semana.
+  //
+  // El limite que las hace seguras: SOLO tocan anuncios que estan dentro de las
+  // campañas enganchadas a los embudos de esa oferta (funnels.meta_campaign_ids).
+  // Una campaña que no esta declarada en la app no existe para estas tools.
+
+  defineTool(server, "list_ads", {
+    title: "List the live Meta ads of an offer",
+    kind: "read",
+    external: true,
+    description:
+      "Ads of the Meta campaigns linked to this offer's funnels, with their status and last-7-days spend, purchases, CPA and CTR. Use it before set_ad_status to see the exact ad names.",
+    input: z.object({ store: storeArg, offer: offerArg }),
+    handler: async ({ store, offer }) => {
+      const { offer: o } = await offerOf(store, offer);
+      const campañas = await campaignsOf(o.id);
+      if (!campañas.length) {
+        throw new UserError(
+          `Offer "${offer}" has no Meta campaign linked to its funnels (funnels.meta_campaign_ids is empty), so there are no ads to list.`,
+        );
+      }
+      const filas = await Promise.all(campañas.map((c) => adsDe(c)));
+      return { offer: o.slug, campaigns: campañas, ads: filas.flat() };
+    },
+  });
+
+  defineTool(server, "set_ad_status", {
+    title: "Pause or re-activate Meta ads",
+    kind: "write",
+    external: true,
+    description:
+      "Set ACTIVE/PAUSED on one or more ads of this offer's linked campaigns. Each entry must be an ad id or an EXACT ad name (as returned by list_ads): a name that matches no ad, or more than one, aborts the whole call without changing anything. Pausing is reversible; re-activating an ad restarts its learning.",
+    input: z.object({
+      store: storeArg,
+      offer: offerArg,
+      ads: z.array(z.string().min(1).max(200)).min(1).max(20)
+        .describe("Ad ids or exact ad names, as shown by list_ads."),
+      status: z.enum(["ACTIVE", "PAUSED"]),
+    }),
+    handler: async ({ store, offer, ads, status }) => {
+      const { offer: o } = await offerOf(store, offer);
+      const campañas = await campaignsOf(o.id);
+      if (!campañas.length) {
+        throw new UserError(`Offer "${offer}" has no Meta campaign linked to its funnels.`);
+      }
+      const todos = (await Promise.all(campañas.map((c) => adsDe(c, false)))).flat();
+
+      // Resolver TODO antes de escribir nada: media tanda aplicada es peor que
+      // ninguna, porque el que lee el resultado cree que paso lo que pidio.
+      const elegidos: { id: string; name: string; status: string }[] = [];
+      for (const pedido of ads) {
+        const coinciden = todos.filter((a) => a.id === pedido || a.name === pedido);
+        if (!coinciden.length) {
+          throw new UserError(
+            `"${pedido}" is not an ad of offer ${offer}. Names must match exactly — run list_ads and copy the name.`,
+          );
+        }
+        if (coinciden.length > 1) {
+          throw new UserError(
+            `"${pedido}" matches ${coinciden.length} ads (${coinciden.map((a) => a.id).join(", ")}). Pass the ad id instead.`,
+          );
+        }
+        if (!elegidos.some((e) => e.id === coinciden[0].id)) elegidos.push(coinciden[0]);
+      }
+
+      for (const a of elegidos) await metaPost(a.id, { status });
+
+      // Releer de Meta: un 200 del POST no prueba que el anuncio quedo asi.
+      const despues = (await Promise.all(campañas.map((c) => adsDe(c, false)))).flat();
+      const cambios = elegidos.map((a) => {
+        const ahora = despues.find((d) => d.id === a.id);
+        return { id: a.id, name: a.name, before: a.status, after: ahora?.status ?? "?", ok: ahora?.status === status };
+      });
+      const fallaron = cambios.filter((c) => !c.ok);
+      return {
+        offer: o.slug,
+        applied: cambios,
+        ...(fallaron.length ? { warning: `Meta did not confirm ${fallaron.length} of ${cambios.length}: ${fallaron.map((f) => f.name).join(", ")}` } : {}),
+      };
     },
   });
 }
