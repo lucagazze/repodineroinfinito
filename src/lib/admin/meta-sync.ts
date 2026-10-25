@@ -45,7 +45,7 @@ type Act = { action_type: string; value: string };
 type IRow = { ad_id?: string; ad_name?: string; adset_id?: string; adset_name?: string; campaign_id?: string; campaign_name?: string; date_start: string;
   spend?: string; impressions?: string; clicks?: string; inline_link_clicks?: string; actions?: Act[]; action_values?: Act[]; video_thruplay_watched_actions?: { value: string }[] };
 type MObj = { id: string; name: string; status?: string; effective_status: string; campaign_id?: string; adset_id?: string;
-  daily_budget?: string; lifetime_budget?: string; bid_amount?: string | number; bid_strategy?: string; start_time?: string; created_time?: string; creative?: Record<string, unknown> };
+  daily_budget?: string; lifetime_budget?: string; bid_amount?: string | number; bid_strategy?: string; start_time?: string; created_time?: string; creative?: Record<string, unknown>; targeting?: Record<string, unknown> };
 type Page<T> = { data?: T[]; paging?: { next?: string } };
 type SyncRow = { account_id: string; name: string | null; currency: string | null; timezone: string | null; last_ok_at: string | null;
   retry_at: string | null; fails: number; running_until: string | null; backfilled_from: string | null; ads_at: string | null };
@@ -193,7 +193,7 @@ const when = (v: unknown) => { const t = typeof v === "string" ? Date.parse(v.re
 
 async function upsertObjects(list: Record<string, unknown>[]) {
   // Todas las filas con las mismas columnas: en un upsert de varias, la que falta se manda como null.
-  const rows = list.map((r) => ({ campaign_id: null, adset_id: null, thumb: null, video_id: null, links: [], start_time: null, created_time: null, ...r }));
+  const rows = list.map((r) => ({ campaign_id: null, adset_id: null, thumb: null, video_id: null, links: [], start_time: null, created_time: null, details: null, details_at: null, ...r }));
   for (let i = 0; i < rows.length; i += 500) {
     const { error } = await db.from("meta_objects").upsert(rows.slice(i, i + 500), { onConflict: "level,id" });
     if (error) throw new Error(`base: ${error.message}`);
@@ -264,7 +264,7 @@ async function syncAccount(act: string, deadline: number, force: boolean): Promi
     const [info, camps, sets, ins] = await metaBatch([
       q(act, { fields: "name,currency,timezone_name" }),
       q(`${act}/campaigns`, { fields: "id,name,status,effective_status,daily_budget,lifetime_budget,bid_strategy,start_time,created_time", effective_status: LIVE, limit: "500" }),
-      q(`${act}/adsets`, { fields: "id,name,campaign_id,status,effective_status,daily_budget,lifetime_budget,bid_amount,bid_strategy,start_time,created_time", effective_status: LIVE, limit: "500" }),
+      q(`${act}/adsets`, { fields: "id,name,campaign_id,status,effective_status,daily_budget,lifetime_budget,bid_amount,bid_strategy,start_time,created_time,targeting", effective_status: LIVE, limit: "500" }),
       q(`${act}/insights`, { level: "ad", fields: AD_F, time_increment: "1", use_unified_attribution_setting: "true", time_range: JSON.stringify({ since, until: today }), limit: "500" }),
     ], 40_000) as [{ name: string; currency: string; timezone_name: string }, Page<MObj>, Page<MObj>, Page<IRow>];
     const [campaigns, adsets, recent] = await Promise.all([rest(camps), rest(sets), rest(ins)]);
@@ -283,7 +283,8 @@ async function syncAccount(act: string, deadline: number, force: boolean): Promi
         daily_budget: budget(o.daily_budget), lifetime_budget: budget(o.lifetime_budget), bid_strategy: o.bid_strategy ?? null, start_time: when(o.start_time), created_time: when(o.created_time), updated_at: now })),
       ...adsets.items.map((o) => ({ level: "adset", id: o.id, account_id: act, name: o.name, status: o.status ?? null, effective_status: o.effective_status,
         campaign_id: o.campaign_id ?? null, daily_budget: budget(o.daily_budget), lifetime_budget: budget(o.lifetime_budget),
-        bid_amount: o.bid_amount != null ? budget(String(o.bid_amount)) : null, bid_strategy: o.bid_strategy ?? null, start_time: when(o.start_time), created_time: when(o.created_time), updated_at: now })),
+        bid_amount: o.bid_amount != null ? budget(String(o.bid_amount)) : null, bid_strategy: o.bid_strategy ?? null, start_time: when(o.start_time), created_time: when(o.created_time),
+        details: o.targeting ? { targeting: o.targeting } : null, details_at: o.targeting ? now : null, updated_at: now })),
       ...(ads?.items ?? []).map((o) => ({ level: "ad", id: o.id, account_id: act, name: o.name, status: o.status ?? null, effective_status: o.effective_status,
         campaign_id: o.campaign_id ?? null, adset_id: o.adset_id ?? null, thumb: (o.creative?.thumbnail_url as string | undefined) ?? null,
         video_id: (o.creative?.video_id as string | undefined)
