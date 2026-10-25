@@ -13,8 +13,22 @@ POR QUE HACE FALTA
   la oferta. Si el plan dijera otra cosa, el comprador veria un numero y se le
   cobraria otro.
 
-  python3 planes-upsell.py            # mira y dice que falta
-  python3 planes-upsell.py --crear    # crea lo que falte y lo enlaza
+  python3 planes-upsell.py --tienda financestudylab           # mira y dice que falta
+  python3 planes-upsell.py --tienda financestudylab --crear   # crea lo que falte
+
+LA TIENDA ES OBLIGATORIA, Y NO ES BUROCRACIA
+  Hasta el 25/10/2026 este script no filtraba por tienda en NINGUNA de sus
+  cuatro consultas, con dos tiendas vivas en la misma base:
+    · `store_whop` devuelve 2 filas y tomaba la primera sin ordenar, asi que
+      no era determinista de que empresa salia la llave de Whop;
+    · `pp_funnels` activos son 4 (1 de Finance, 3 de Physics): recorria las
+      cadenas de las dos;
+    · `funnels?slug=eq.kit` andaba de casualidad, porque hoy solo una tienda
+      tiene un embudo con ese slug;
+    · la metadata del plan decia "financestudylab" escrito a mano.
+  Juntas podian crear planes de productos de Physics bajo la empresa de
+  Finance y escribir ese plan_id en Physics. Un plan de otra empresa no cobra
+  con la tarjeta guardada: el post-pago falla en silencio.
 """
 import json, os, pathlib, subprocess, sys, urllib.error, urllib.request
 
@@ -45,8 +59,22 @@ def supabase(metodo, ruta, cuerpo=None):
     return json.loads(t) if t.strip() else []
 
 
-def llave():
-    fila = supabase("GET", "store_whop?select=api_key_enc,company_id")
+def tienda_pedida():
+    """El slug que vino por --tienda, resuelto a su id. Sin esto no se corre."""
+    if "--tienda" not in sys.argv:
+        sys.exit("\n  Falta --tienda <slug>. Hay mas de una tienda en esta base y\n"
+                 "  sin el slug no se sabe de cual son los planes.\n"
+                 "  Ej: python3 planes-upsell.py --tienda financestudylab\n")
+    slug = sys.argv[sys.argv.index("--tienda") + 1]
+    fila = supabase("GET", f"stores?select=id,slug&slug=eq.{slug}")
+    if not fila:
+        hay = ", ".join(s["slug"] for s in supabase("GET", "stores?select=slug"))
+        sys.exit(f"\n  No existe la tienda «{slug}». Hay: {hay}\n")
+    return fila[0]["id"], fila[0]["slug"]
+
+
+def llave(store_id):
+    fila = supabase("GET", f"store_whop?select=api_key_enc,company_id&store_id=eq.{store_id}")
     if not fila:
         sys.exit("\n  Esta tienda no tiene Whop conectado.\n")
     js = r'''
@@ -78,9 +106,9 @@ def whop(k, ruta, metodo="GET", cuerpo=None):
         sys.exit(f"\n  Whop lo rechazo ({e.code}):\n  {e.read().decode()[:400]}\n")
 
 
-def pasos_del_postpago():
-    """Los productos que el post-pago ofrece, en orden, con su precio en USD."""
-    pps = supabase("GET", "pp_funnels?select=id,name,active&active=eq.true")
+def pasos_del_postpago(store_id):
+    """Los productos que el post-pago de ESTA tienda ofrece, en orden, con su precio."""
+    pps = supabase("GET", f"pp_funnels?select=id,name,active&active=eq.true&store_id=eq.{store_id}")
     salida = []
     for f in pps:
         st = supabase("GET", f"pp_steps?select=sort_order,product_id&pp_funnel_id=eq.{f['id']}&order=sort_order")
@@ -95,18 +123,23 @@ def pasos_del_postpago():
 
 def main():
     crear = "--crear" in sys.argv
-    k, empresa = llave()
-    pasos = pasos_del_postpago()
+    store_id, slug = tienda_pedida()
+    k, empresa = llave(store_id)
+    pasos = pasos_del_postpago(store_id)
     if not pasos:
         sys.exit("\n  No hay cadena de post-pago activa.\n")
 
     # El producto de Whop bajo el que colgar los planes: el mismo del plan
     # principal, para no dispersar el catalogo de la cuenta.
-    emb = supabase("GET", "funnels?select=whop_plan_id&slug=eq.kit")[0]
+    emb_filas = supabase("GET", f"funnels?select=slug,whop_plan_id&store_id=eq.{store_id}&whop_plan_id=not.is.null&order=slug")
+    if not emb_filas:
+        sys.exit(f"\n  {slug} no tiene ningun embudo con plan de Whop del que colgar los nuevos.\n")
+    emb = emb_filas[0]
     base = whop(k, f"/plans/{emb['whop_plan_id']}")
     prod_whop = base["product"]["id"]
 
-    print(f"\n  Cuenta {empresa}  ·  producto de Whop {prod_whop}\n")
+    print(f"\n  Tienda {slug}  ·  empresa {empresa}  ·  embudo «{emb['slug']}»"
+          f"  ·  producto de Whop {prod_whop}\n")
     faltan = []
     for p in pasos:
         estado = p["whop_plan_id"] or "SIN PLAN"
@@ -120,7 +153,7 @@ def main():
     if not faltan:
         print("\n  Nada que crear: todos tienen plan.\n"); return
     if not crear:
-        print(f"\n  Faltan {len(faltan)}. Para crearlos:  python3 planes-upsell.py --crear\n"); return
+        print(f"\n  Faltan {len(faltan)}. Para crearlos:  python3 planes-upsell.py --tienda {slug} --crear\n"); return
 
     print(f"\n  Voy a crear {len(faltan)} plan(es) de pago unico en USD y enlazarlos.")
     # --si: confirmacion no interactiva, para que lo pueda correr un asistente.
@@ -143,7 +176,7 @@ def main():
             "visibility": "hidden",   # solo se vende desde el post-pago
             "unlimited_stock": True,
             "description": p["short_name"] or p["name"],
-            "metadata": {"tienda": "financestudylab", "producto": p["slug"], "kind": "upsell"},
+            "metadata": {"tienda": slug, "producto": p["slug"], "kind": "upsell"},
         })
         supabase("PATCH", f"products?id=eq.{p['id']}", {"whop_plan_id": nuevo["id"]})
         # Comprobacion: que la base quedo apuntando y que el plan cobra lo que debe
