@@ -34,7 +34,9 @@ import { fetchAll, storeProducts } from "./fetch-all";
 
 type P = Product & { active: boolean | null; pc_gallery?: unknown };
 export type LibLink = { label: string | null; url: string };
-export type LibBook = { id: string; name: string; description: string; cover: string | null; links: LibLink[]; presale: boolean; pages: string[]; /** Desbloqueado gratis por el administrador (se puede quitar). */ granted?: boolean };
+export type LibBook = { id: string; name: string; description: string; cover: string | null; links: LibLink[]; presale: boolean;
+  /** Dias de preventa del producto: el mismo numero con el que corre el reloj de entrega. */
+  presaleDays: number | null; pages: string[]; /** Desbloqueado gratis por el administrador (se puede quitar). */ granted?: boolean };
 /** Para la vista de administrador: cada compra de la persona (de la app y del checkout anterior). */
 export type LibOrder = { ref: string; date: string; total: number; currency: string; status: string; items: { name: string; kind: string }[]; source: "app" | "legacy" };
 export type LibGroup = { id: string; name: string; description: string; cover: string | null; kit: boolean; links: LibLink[]; books: LibBook[] };
@@ -462,7 +464,7 @@ export async function libraryData(storeId: string, email: string, opts: { admin?
   };
   const book = (p: P, orderId?: string | null): LibBook => ({
     id: p.id, name: p.short_name || p.name, description: p.description ?? "", cover: p.image_url,
-    links: linksOf(p, orderId), presale: !!p.presale, pages: galleryOf(p), ...(granted.has(p.id) ? { granted: true } : {}),
+    links: linksOf(p, orderId), presale: !!p.presale, presaleDays: (p.presale_days as number | null) ?? null, pages: galleryOf(p), ...(granted.has(p.id) ? { granted: true } : {}),
   });
 
   // Lo comprado, en orden de compra: los packs como grupo con sus libros; los sueltos juntos al final.
@@ -648,7 +650,7 @@ export async function libraryAll(storeId: string): Promise<LibraryData | null> {
       const base = byId.get(p.variant_of ?? "") ?? p;
       if (seen.has(base.id)) return;
       seen.add(base.id);
-      books.push({ id: base.id, name: base.short_name || base.name, description: base.description ?? "", cover: base.image_url ?? p.image_url, links: links(base), presale: !!base.presale, pages: galleryOf(base) });
+      books.push({ id: base.id, name: base.short_name || base.name, description: base.description ?? "", cover: base.image_url ?? p.image_url, links: links(base), presale: !!base.presale, presaleDays: (base.presale_days as number | null) ?? null, pages: galleryOf(base) });
     };
     for (const id of ids) push(id);
     if (!books.length) continue;

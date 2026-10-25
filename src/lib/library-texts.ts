@@ -6,7 +6,12 @@ export type LibTexts = {
   sent: (email: string) => string; badEmail: string; tooMany: string;
   hello: (name: string) => string; count: (n: number) => string; logout: string;
   yours: string; download: string; open: string; pages: (n: number) => string;
-  presale: string; presaleSub: string; presaleBtn: string; inKit: string;
+  /** El plazo NO se escribe a mano: sale de products.presale_days, que es el mismo
+   *  numero con el que corre el reloj de entrega. Hasta el 25/10/2026 estos dos
+   *  textos decian «2 dias» fijo en los ocho idiomas mientras la base decia 60:
+   *  el comprador de un pre-pedido leia en su biblioteca que su libro llegaba en
+   *  dos dias. */
+  presale: string; presaleSub: (days: number) => string; presaleBtn: (days: number) => string; inKit: string;
   collection: (name: string) => string; progress: (have: number, total: number) => string;
   unlock: string; unlocking: string; unlocked: string; locked: string; oneClick: string;
   more: string; discover: string; help: string; helpSub: string; write: string; sameTopic: string; forYou: string;
@@ -29,7 +34,7 @@ const it: LibTexts = {
   badEmail: "Scrivi un'email valida.", tooMany: "Ti abbiamo già mandato il link da poco: controlla la posta (anche spam).",
   hello: (n) => (n ? `Ciao ${n}` : "Ciao"), count: (n) => (n === 1 ? "Hai 1 libro" : `Hai ${n} libri`), logout: "Esci",
   yours: "I tuoi libri", download: "Scarica", open: "Apri", pages: (n) => `${n} pagine`,
-  presale: "In arrivo", presaleSub: "Il contenuto sarà disponibile tra 2 giorni. Ti avvisiamo via email.", presaleBtn: "Disponibile tra 2 giorni", inKit: "Nel kit",
+  presale: "In arrivo", presaleSub: (d) => `Il contenuto sarà disponibile tra ${d} ${d === 1 ? "giorno" : "giorni"}. Ti avvisiamo via email.`, presaleBtn: (d) => `Disponibile tra ${d} ${d === 1 ? "giorno" : "giorni"}`, inKit: "Nel kit",
   collection: (n) => `Completa la collezione · ${n}`, progress: (h, t) => `Ne hai ${h} su ${t}`,
   unlock: "Sblocca", unlocking: "Un attimo…", unlocked: "Sbloccato ✓", locked: "Bloccato", oneClick: "Con la stessa carta, in un clic. Ti arriva subito via email.",
   more: "Altri libri per te", discover: "Scopri", sameTopic: "Stesso argomento", forYou: "Scelto per te",
@@ -57,7 +62,7 @@ const en: LibTexts = {
   badEmail: "Enter a valid email.", tooMany: "We just sent you a link: check your inbox (and spam).",
   hello: (n) => (n ? `Hi ${n}` : "Hi"), count: (n) => (n === 1 ? "You have 1 book" : `You have ${n} books`), logout: "Sign out",
   yours: "Your books", download: "Download", open: "Open", pages: (n) => `${n} pages`,
-  presale: "Coming soon", presaleSub: "The content will be ready in 2 days. We'll let you know by email.", presaleBtn: "Available in 2 days", inKit: "In the kit",
+  presale: "Coming soon", presaleSub: (d) => `The content will be ready in ${d} ${d === 1 ? "day" : "days"}. We'll let you know by email.`, presaleBtn: (d) => `Available in ${d} ${d === 1 ? "day" : "days"}`, inKit: "In the kit",
   collection: (n) => `Complete the collection · ${n}`, progress: (h, t) => `You have ${h} of ${t}`,
   unlock: "Unlock", unlocking: "One moment…", unlocked: "Unlocked ✓", locked: "Locked", oneClick: "Same card, one click. It reaches you right away by email.",
   more: "More books for you", discover: "Discover", sameTopic: "Same topic", forYou: "Picked for you",
@@ -85,7 +90,7 @@ const es: LibTexts = {
   badEmail: "Escribí un email válido.", tooMany: "Ya te mandamos el link hace poco: revisá tu correo (también spam).",
   hello: (n) => (n ? `Hola ${n}` : "Hola"), count: (n) => (n === 1 ? "Tenés 1 libro" : `Tenés ${n} libros`), logout: "Salir",
   yours: "Tus libros", download: "Descargar", open: "Abrir", pages: (n) => `${n} páginas`,
-  presale: "Llega pronto", presaleSub: "El contenido va a estar en 2 días. Te avisamos por email.", presaleBtn: "Disponible en 2 días", inKit: "En el kit",
+  presale: "Llega pronto", presaleSub: (d) => `El contenido va a estar en ${d} ${d === 1 ? "día" : "días"}. Te avisamos por email.`, presaleBtn: (d) => `Disponible en ${d} ${d === 1 ? "día" : "días"}`, inKit: "En el kit",
   collection: (n) => `Completá la colección · ${n}`, progress: (h, t) => `Tenés ${h} de ${t}`,
   unlock: "Desbloquear", unlocking: "Un momento…", unlocked: "Desbloqueado ✓", locked: "Bloqueado", oneClick: "Con la misma tarjeta, en un clic. Te llega al instante por email.",
   more: "Más libros para vos", discover: "Ver", sameTopic: "Mismo tema", forYou: "Elegido para vos",
@@ -113,7 +118,7 @@ const pt: LibTexts = {
   badEmail: "Digite um e-mail válido.", tooMany: "Acabamos de enviar o link: confira seu e-mail (e o spam).",
   hello: (n) => (n ? `Olá, ${n}` : "Olá"), count: (n) => (n === 1 ? "Você tem 1 livro" : `Você tem ${n} livros`), logout: "Sair",
   yours: "Seus livros", download: "Baixar", open: "Abrir", pages: (n) => `${n} páginas`,
-  presale: "Em breve", presaleSub: "O conteúdo estará disponível em 2 dias. Avisamos por e-mail.", presaleBtn: "Disponível em 2 dias", inKit: "No kit",
+  presale: "Em breve", presaleSub: (d) => `O conteúdo estará disponível em ${d} ${d === 1 ? "dia" : "dias"}. Avisamos por e-mail.`, presaleBtn: (d) => `Disponível em ${d} ${d === 1 ? "dia" : "dias"}`, inKit: "No kit",
   collection: (n) => `Complete a coleção · ${n}`, progress: (h, t) => `Você tem ${h} de ${t}`,
   unlock: "Desbloquear", unlocking: "Um momento…", unlocked: "Desbloqueado ✓", locked: "Bloqueado", oneClick: "Mesmo cartão, um clique. Chega na hora por e-mail.",
   more: "Mais livros para você", discover: "Ver", sameTopic: "Mesmo tema", forYou: "Escolhido para você",
@@ -141,7 +146,7 @@ const fr: LibTexts = {
   badEmail: "Saisissez un e-mail valide.", tooMany: "Nous venons de vous envoyer le lien : vérifiez votre boîte (et les spams).",
   hello: (n) => (n ? `Bonjour ${n}` : "Bonjour"), count: (n) => (n === 1 ? "Vous avez 1 livre" : `Vous avez ${n} livres`), logout: "Se déconnecter",
   yours: "Vos livres", download: "Télécharger", open: "Ouvrir", pages: (n) => `${n} pages`,
-  presale: "Bientôt disponible", presaleSub: "Le contenu sera disponible dans 2 jours. Nous vous prévenons par e-mail.", presaleBtn: "Disponible dans 2 jours", inKit: "Dans le kit",
+  presale: "Bientôt disponible", presaleSub: (d) => `Le contenu sera disponible dans ${d} ${d === 1 ? "jour" : "jours"}. Nous vous prévenons par e-mail.`, presaleBtn: (d) => `Disponible dans ${d} ${d === 1 ? "jour" : "jours"}`, inKit: "Dans le kit",
   collection: (n) => `Complétez la collection · ${n}`, progress: (h, t) => `Vous en avez ${h} sur ${t}`,
   unlock: "Débloquer", unlocking: "Un instant…", unlocked: "Débloqué ✓", locked: "Verrouillé", oneClick: "Même carte, un clic. Vous le recevez tout de suite par e-mail.",
   more: "D'autres livres pour vous", discover: "Découvrir", sameTopic: "Même sujet", forYou: "Choisi pour vous",
@@ -169,7 +174,7 @@ const de: LibTexts = {
   badEmail: "Gib eine gültige E-Mail ein.", tooMany: "Wir haben dir gerade einen Link geschickt: Schau in dein Postfach (auch Spam).",
   hello: (n) => (n ? `Hallo ${n}` : "Hallo"), count: (n) => (n === 1 ? "Du hast 1 Buch" : `Du hast ${n} Bücher`), logout: "Abmelden",
   yours: "Deine Bücher", download: "Herunterladen", open: "Öffnen", pages: (n) => `${n} Seiten`,
-  presale: "Kommt bald", presaleSub: "Der Inhalt ist in 2 Tagen da. Wir sagen dir per E-Mail Bescheid.", presaleBtn: "Verfügbar in 2 Tagen", inKit: "Im Set",
+  presale: "Kommt bald", presaleSub: (d) => `Der Inhalt ist in ${d} ${d === 1 ? "Tag" : "Tagen"} da. Wir sagen dir per E-Mail Bescheid.`, presaleBtn: (d) => `Verfügbar in ${d} ${d === 1 ? "Tag" : "Tagen"}`, inKit: "Im Set",
   collection: (n) => `Vervollständige die Sammlung · ${n}`, progress: (h, t) => `Du hast ${h} von ${t}`,
   unlock: "Freischalten", unlocking: "Einen Moment…", unlocked: "Freigeschaltet ✓", locked: "Gesperrt", oneClick: "Gleiche Karte, ein Klick. Du bekommst es sofort per E-Mail.",
   more: "Weitere Bücher für dich", discover: "Ansehen", sameTopic: "Gleiches Thema", forYou: "Für dich ausgewählt",
@@ -198,7 +203,7 @@ const pl: LibTexts = {
   badEmail: "Wpisz poprawny e-mail.", tooMany: "Przed chwilą wysłaliśmy Ci link: sprawdź skrzynkę (także spam).",
   hello: (n) => (n ? `Cześć ${n}` : "Cześć"), count: (n) => (n === 1 ? "Masz 1 książkę" : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? `Masz ${n} książki` : `Masz ${n} książek`), logout: "Wyloguj",
   yours: "Twoje książki", download: "Pobierz", open: "Otwórz", pages: (n) => `${n} stron`,
-  presale: "Wkrótce", presaleSub: "Treść będzie gotowa za 2 dni. Damy Ci znać e-mailem.", presaleBtn: "Dostępne za 2 dni", inKit: "W zestawie",
+  presale: "Wkrótce", presaleSub: (d) => `Treść będzie gotowa za ${d} ${d === 1 ? "dzień" : "dni"}. Damy Ci znać e-mailem.`, presaleBtn: (d) => `Dostępne za ${d} ${d === 1 ? "dzień" : "dni"}`, inKit: "W zestawie",
   collection: (n) => `Uzupełnij kolekcję · ${n}`, progress: (h, t) => `Masz ${h} z ${t}`,
   unlock: "Odblokuj", unlocking: "Chwileczkę…", unlocked: "Odblokowane ✓", locked: "Zablokowane", oneClick: "Ta sama karta, jedno kliknięcie. Dostaniesz to od razu e-mailem.",
   more: "Więcej książek dla Ciebie", discover: "Zobacz", sameTopic: "Ten sam temat", forYou: "Wybrane dla Ciebie",
@@ -227,7 +232,7 @@ const nl: LibTexts = {
   badEmail: "Vul een geldig e-mailadres in.", tooMany: "We hebben je net een link gestuurd: kijk in je inbox (ook in spam).",
   hello: (n) => (n ? `Hoi ${n}` : "Hoi"), count: (n) => (n === 1 ? "Je hebt 1 boek" : `Je hebt ${n} boeken`), logout: "Uitloggen",
   yours: "Je boeken", download: "Downloaden", open: "Openen", pages: (n) => `${n} pagina's`,
-  presale: "Binnenkort", presaleSub: "De inhoud is over 2 dagen klaar. We laten het je per e-mail weten.", presaleBtn: "Beschikbaar over 2 dagen", inKit: "In de set",
+  presale: "Binnenkort", presaleSub: (d) => `De inhoud is over ${d} ${d === 1 ? "dag" : "dagen"} klaar. We laten het je per e-mail weten.`, presaleBtn: (d) => `Beschikbaar over ${d} ${d === 1 ? "dag" : "dagen"}`, inKit: "In de set",
   collection: (n) => `Maak de collectie compleet · ${n}`, progress: (h, t) => `Je hebt ${h} van ${t}`,
   unlock: "Ontgrendelen", unlocking: "Even geduld…", unlocked: "Ontgrendeld ✓", locked: "Vergrendeld", oneClick: "Dezelfde kaart, één klik. Je krijgt het meteen per e-mail.",
   more: "Meer boeken voor jou", discover: "Bekijken", sameTopic: "Zelfde onderwerp", forYou: "Voor jou gekozen",

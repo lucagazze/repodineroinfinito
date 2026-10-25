@@ -8,14 +8,14 @@ import { existsSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const SRC = new URL("../src/", import.meta.url);
-// src/lib arrastra next/cache por los imports de checkout-data; la vista previa
-// no ejecuta esos caminos, asi que se resuelve a un stub.
-const STUBS = { "next/cache": new URL("./next-cache-stub.mjs", import.meta.url).href };
+// src/lib arrastra submodulos de next (cache, server, navigation, headers) por
+// la cadena de imports; la vista previa no ejecuta esos caminos, van a un stub.
+const NEXT_STUB = new URL("./next-stub.mjs", import.meta.url).href;
 
 registerHooks({
   resolve(spec, ctx, next) {
     let s = spec;
-    if (STUBS[s]) return next(STUBS[s], ctx);
+    if (s === "next" || s.startsWith("next/")) return next(NEXT_STUB, ctx);
     if (s.startsWith("@/")) s = new URL(s.slice(2), SRC).href;
 
     const relative = s.startsWith(".") || s.startsWith("file:");

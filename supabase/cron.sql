@@ -55,6 +55,15 @@ select cron.schedule('email-marketing', '* * * * *', $cron$select net.http_get(
     headers := jsonb_build_object('Authorization', 'Bearer TU_CRON_SECRET'),
     timeout_milliseconds := 55000
   );$cron$);
+-- La prueba de la carta semanal: domingos 15:00 UTC (12:00 en Rosario), un
+-- rato despues de que la tarea de Claude refresca las cifras. Manda cada
+-- idioma del borrador a TEST_EMAIL y a nadie mas, para que quede el respaldo
+-- en el buzon antes de apretar «Enviar». No saca campañas: eso es confirmSend.
+select cron.schedule('prueba-semanal', '0 15 * * 0', $cron$select net.http_get(
+    url := 'TU_APP/api/cron/mkt-prueba',
+    headers := jsonb_build_object('Authorization', 'Bearer TU_CRON_SECRET'),
+    timeout_milliseconds := 55000
+  );$cron$);
 select cron.schedule('piloto-pujas-reintento', '37 * * * *', $cron$select net.http_get(
     url := 'TU_APP/api/cron/pujas?retry=1',
     headers := jsonb_build_object('Authorization', 'Bearer TU_CRON_SECRET'),

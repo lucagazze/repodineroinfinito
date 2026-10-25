@@ -18,6 +18,10 @@
  *   {price}        precio de la oferta en la moneda del pedido
  *   {compare}      precio tachado (vacío si no tiene)
  *   {product}      nombre corto del producto
+ *   {presale-days} dias de preventa (products.presale_days), el MISMO numero con el
+ *                  que corre el reloj de entrega. Escribir «within 60 days» a mano
+ *                  deja dos verdades que se separan apenas alguien cambia el plazo:
+ *                  paso el 25/10/2026, con la biblioteca diciendo «2 dias» y la base 60.
  * Marcado simple: **negrita** en pitch, intro, bullets, boxSubtitle y stats.
  *
  * Lo usan la página /oferta, la vista previa y el MCP: un solo formato.
@@ -443,7 +447,7 @@ export function firstNameOf(full: string | null | undefined): string | null {
 export const orderNumberOf = (orderId: string) => orderId.replace(/-/g, "").slice(0, 8).toUpperCase();
 
 /** Reemplaza las etiquetas. Sin nombre, la etiqueta se va con su coma. */
-export function fillTags(s: string, tags: { firstName: string | null; orderNumber: string; price: string; compare: string | null; product: string }) {
+export function fillTags(s: string, tags: { firstName: string | null; orderNumber: string; price: string; compare: string | null; product: string; presaleDays?: number | null }) {
   let out = s;
   if (!tags.firstName) {
     const atStart = /^\s*\{first-name\}\s*[,!.]?\s*/i.test(out);
@@ -455,7 +459,8 @@ export function fillTags(s: string, tags: { firstName: string | null; orderNumbe
     .replace(/\{order-number\}/gi, tags.orderNumber)
     .replace(/\{price\}/gi, tags.price)
     .replace(/\{compare\}/gi, tags.compare ?? "")
-    .replace(/\{product\}/gi, tags.product);
+    .replace(/\{product\}/gi, tags.product)
+    .replace(/\{presale-days\}/gi, tags.presaleDays != null ? String(tags.presaleDays) : "");
 }
 
 export function buildOfferView(i: ViewInput): OfferView {
@@ -469,6 +474,7 @@ export function buildOfferView(i: ViewInput): OfferView {
     price: i.price,
     compare: i.compare,
     product,
+    presaleDays: i.product.presale_days ?? null,
   };
   const f = (s: string) => fillTags(s, tags);
   const or = (own: string, def: string) => f(own || def);

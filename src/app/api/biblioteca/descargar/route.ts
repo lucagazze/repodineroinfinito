@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
   const pid = sp.get("p") ?? "";
   const fid = sp.get("f");
   if (!/^[0-9a-f-]{36}$/i.test(pid) || (fid && !/^[A-Za-z0-9_-]{10,80}$/.test(fid))) return page("Link non valido", "", 400);
-  const { data: p } = await db.from("products").select("id,store_id,name,short_name,variant_of,delivery_url,delivery_file,delivery_file_name,presale,stores(default_locale)").eq("id", pid).maybeSingle();
+  const { data: p } = await db.from("products").select("id,store_id,name,short_name,variant_of,delivery_url,delivery_file,delivery_file_name,presale,presale_days,stores(default_locale)").eq("id", pid).maybeSingle();
   if (!p) return page("Not found", "", 404);
   const auth = readLibrary(sp.get("t"), p.store_id as string) ?? readLibrary((await cookies()).get(LIB_COOKIE)?.value, p.store_id as string);
   // En el idioma de quien mira (el que eligió en la biblioteca o el de su navegador), como el portal.
@@ -62,7 +62,7 @@ export async function GET(req: NextRequest) {
   const files = await deliveryPdfs(url).catch(() => []);
   if (!files.length) {
     return p.presale
-      ? page(t.presale, `<p style="color:#667085">${esc(t.presaleSub)}</p>`)
+      ? page(t.presale, `<p style="color:#667085">${esc(t.presaleSub((p.presale_days as number | null) ?? 0))}</p>`)
       : page("Non disponibile", `<p style="color:#667085">${url ? `<a href="${esc(url)}">Drive</a>` : ""}</p>`, 404);
   }
   const pick = fid ? files.find((f) => f.id === fid) : files.length === 1 ? files[0] : null;

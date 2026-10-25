@@ -151,9 +151,10 @@ export default async function Biblioteca({ params, searchParams }: { params: Pro
       <h3 className="bib-t">{b.name}</h3>
       <p className="bib-d">{b.description}</p>
       <div className="bib-acts">
-        {/* Preventa: su descripción de siempre y, solo en el botón, «Disponible en 2 días». */}
+        {/* Preventa: su descripción de siempre y, solo en el botón, el plazo REAL del
+              producto. Decía «2 días» fijo mientras la base decía 60. */}
         {b.presale
-          ? <span className="bib-btn bib-soon">⏳ {t.presaleBtn}</span>
+          ? <span className="bib-btn bib-soon">⏳ {t.presaleBtn(b.presaleDays ?? 0)}</span>
           : b.links[0] && <a className="bib-btn" href={dl(b)}><DlIcon /> {t.download}</a>}
         <Pages pages={b.pages} title={b.name} label={t.pages(b.pages.length)} closeLabel={t.close} />
         {buyerAdmin && b.granted && <AdminGrant store={store.id} email={auth.email} productId={b.id} remove />}
