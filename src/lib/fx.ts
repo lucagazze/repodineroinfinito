@@ -22,6 +22,7 @@ const COUNTRY_CURRENCY: Record<string, string> = {
   GB: "GBP", CH: "CHF", SE: "SEK", DK: "DKK", NO: "NOK", PL: "PLN", CZ: "CZK",
   RO: "RON", BR: "BRL", MX: "MXN", CA: "CAD", AU: "AUD", NZ: "NZD",
   IN: "INR", KR: "KRW", JP: "JPY", SG: "SGD", HK: "HKD",
+  ZA: "ZAR",
 };
 
 export function countryCurrency(country?: string | null): string | null {
