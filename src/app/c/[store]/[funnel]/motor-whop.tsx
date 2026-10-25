@@ -112,8 +112,25 @@ export function useMotorWhop(c: CtxMotor): Motor {
         const Whop = await whopElements;
         const whop = Whop({ locale: idiomaWhop(p.locale) });
         const r = await whop.payments.handleNextAction({
+          // La vuelta del 3D Secure lleva el id del pago, la tienda y el embudo.
+          //
+          // EL ERROR QUE ESTO EVITA: esta URL era `/gracias` pelada. La pagina
+          // de gracias identifica el pedido con refOf(), que necesita uno de
+          // payment_intent / session_id / payment / payment_id; sin ninguno
+          // corta en «falta el identificador» y NUNCA llega a la linea que
+          // redirige al post-pago. O sea que el comprador que pasa por 3DS
+          // pagaba, no veia la oferta y ni siquiera sus descargas -- y el 3DS
+          // es OBLIGATORIO en Reino Unido y la UE, que son el grueso de las
+          // ventas.
+          //
+          // Va `payment_intent` porque findOrder() busca ese campo probando el
+          // valor pelado y con el prefijo `whop:`, que es como se guarda.
           clientSecret: res.clientSecret,
-          returnUrl: `${window.location.origin}/gracias`,
+          returnUrl: `${window.location.origin}/gracias?`
+            // Sin id no se agrega el parametro vacio: `payment_intent=` haria
+            // que refOf() lo tome como presente y findOrder() buscara "".
+            + (res.id ? `payment_intent=${encodeURIComponent(res.id)}&` : "")
+            + `store=${encodeURIComponent(p.store)}&funnel=${encodeURIComponent(p.funnel)}`,
         });
         // Si redirigio, el navegador ya se fue: no hay que soltar el boton.
         if (r?.redirected) return true;
