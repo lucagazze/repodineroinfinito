@@ -164,6 +164,41 @@ async function setItems(store: StoreRow, funnel: { id: string; main_product_id: 
     pos[it.role] = n + 1;
     return { product: p, role: it.role, sort_order: it.sort_order ?? n };
   });
+  // --------------------------------------------------- las reglas de la escalera
+  //
+  // Cuatro reglas que no se pueden deducir leyendo el modelo y que se
+  // aprendieron rompiendolas. Viven aca, en el camino de escritura, y no en
+  // una nota: una regla que depende de que alguien se acuerde no es una regla.
+  //
+  // Solo se consultan si hay algun bump, para no cobrarle dos consultas a cada
+  // llamada que toca bonos o incluidos.
+  const hayBumps = desired.some((d) => d.role === "bump");
+  let entregaElPrincipal = new Set<string>();
+  const esOto = new Map<string, string>();      // producto -> por que no puede ser bump
+  if (hayBumps) {
+    if (funnel.main_product_id) {
+      const { data: m } = await db.from("products").select("includes").eq("id", funnel.main_product_id).maybeSingle();
+      entregaElPrincipal = new Set(((m?.includes as string[] | null) ?? []).filter(Boolean));
+    }
+    // Todo lo que el post-pago de ESTA tienda usa como paso, y lo que esos
+    // pasos entregan dentro: ofrecer una pieza suelta de un pack que es OTO
+    // hace que overlapsOwned descarte el pack entero (postpurchase.ts).
+    const { data: pasos } = await db
+      .from("pp_steps")
+      .select("product_id, pp_funnels!inner(store_id)")
+      .eq("pp_funnels.store_id", store.id);
+    const idsOto = [...new Set((pasos ?? []).map((s) => s.product_id as string).filter(Boolean))];
+    if (idsOto.length) {
+      const { data: prodOto } = await db.from("products").select("id,slug,includes").in("id", idsOto);
+      for (const p of prodOto ?? []) {
+        esOto.set(p.id as string, `es un OTO del post-pago`);
+        for (const dentro of ((p.includes as string[] | null) ?? []).filter(Boolean)) {
+          if (!esOto.has(dentro)) esOto.set(dentro, `va dentro del OTO "${p.slug}"`);
+        }
+      }
+    }
+  }
+
   const seen = new Set<string>();
   for (const d of desired) {
     const k = `${d.product.id}:${d.role}`;
@@ -175,6 +210,29 @@ async function setItems(store: StoreRow, funnel: { id: string; main_product_id: 
       warnings.push(`${d.role} "${d.product.slug}" has no price: it will not be offered until it has one (upsert_product prices).`);
     }
     if (d.role === "bump" && d.product.kind === "bonus") warnings.push(`"${d.product.slug}" is a bonus-kind product used as a paid bump.`);
+
+    if (d.role === "bump") {
+      // 1. Ya se lo lleva igual: cobrarselo es venderle lo que ya tiene.
+      if (entregaElPrincipal.has(d.product.id)) {
+        throw new UserError(
+          `"${d.product.slug}" cannot be a bump: the main product of this checkout already includes it, so the buyer would be charged for something they get anyway.`
+        );
+      }
+      // 2. Una suscripcion convierte el checkout entero en cobro recurrente.
+      //    Su lugar es el post-pago, donde el comprador ya decidio comprar.
+      if (d.product.subscription) {
+        throw new UserError(
+          `"${d.product.slug}" is a subscription and cannot be an order bump: it would turn the whole checkout into a recurring charge. Use it as a post-purchase step instead.`
+        );
+      }
+      // 3 y 4. Quemarse el post-pago, directamente o por overlapsOwned.
+      const choque = esOto.get(d.product.id);
+      if (choque) {
+        throw new UserError(
+          `"${d.product.slug}" cannot be a bump: it ${choque}. A buyer who takes it here will never be shown that offer again, so the bump cannibalises the post-purchase instead of adding to it.`
+        );
+      }
+    }
   }
 
   const { data: existing, error } = await db.from("funnel_items").select("id,product_id,role,sort_order").eq("funnel_id", funnel.id);

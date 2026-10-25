@@ -160,7 +160,7 @@ export type ProductRow = {
   image_url: string | null;
   /** id (no slug) del producto base cuando este es una variante de precio. */
   variant_of: string | null;
-  /** slugs de los productos que se entregan DENTRO de este (un pack). */
+  /** ids (no slugs) de los productos que se entregan DENTRO de este (un pack). */
   includes: string[] | null;
   presale: boolean | null;
   presale_days: number | null;
