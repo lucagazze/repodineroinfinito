@@ -89,10 +89,32 @@ ${(p.delivery_links ?? []).filter((l) => /^https?:\/\//.test(l.url)).map((l) => 
  * Lo que la tienda personalizó en Configuración › Entrega. Cada campo vacío
  * vuelve al texto de siempre, en el idioma del comprador.
  */
-type DeliveryCustom = { subject?: string; welcome?: string; closing?: string; color?: string; headerImage?: string };
+type DeliveryTextos = { subject?: string; welcome?: string; closing?: string };
+/**
+ * Los textos propios del mail de entrega.
+ *
+ * Acepta DOS formas, y por una razon medida:
+ *   plana      { subject, welcome, closing, color, ... }  -> vale para todo idioma
+ *   por idioma { es: {subject,...}, en: {...}, color, ... }
+ *
+ * EL FALLO QUE ESTO ARREGLA (26/10/2026, medido con una compra de prueba)
+ *   Finance Study Lab tenia los tres textos cargados en INGLES, y la forma
+ *   plana los aplica a todos los pedidos. Un comprador español veia la landing,
+ *   el checkout y el post-pago en español, pagaba, y el mail de entrega -- lo
+ *   unico que le queda despues -- le llegaba entero en ingles.
+ *   La forma plana se conserva para no romper lo que ya estaba cargado.
+ */
+type DeliveryCustom = DeliveryTextos & {
+  color?: string; headerImage?: string;
+} & { [locale: string]: unknown };
 
-function customOf(store: Store) {
-  const c = (store.delivery_email ?? {}) as DeliveryCustom;
+function customOf(store: Store, locale?: string) {
+  const raw = (store.delivery_email ?? {}) as DeliveryCustom;
+  // El bloque del idioma manda sobre el plano. Si no hay bloque, se usa el
+  // plano; si tampoco, quedan vacios y gana la traduccion de i18n.
+  const porIdioma = locale && typeof raw[locale] === "object" && raw[locale]
+    ? (raw[locale] as DeliveryTextos) : null;
+  const c = { ...raw, ...(porIdioma ?? {}) } as DeliveryCustom;
   const txt = (v: unknown, max: number) => (typeof v === "string" ? v.trim().slice(0, max) : "");
   const logo = (store.brand as { logoEmail?: unknown } | null)?.logoEmail;
   return {
@@ -116,7 +138,7 @@ function deliveryHtml(a: DeliveryArgs) {
   const hero = cover(a.main);
   const legal = legalOf(a.store).name;
   const items = [a.main, ...a.extras.filter((p) => p.id !== a.main.id)];
-  const c = customOf(a.store);
+  const c = customOf(a.store, a.locale);
   const color = c.color || PAY;
   const shown = a.store.display_name || a.store.name;
   const first = a.name ? a.name.split(" ")[0] : null;
@@ -190,7 +212,7 @@ ${esc(t.mailSupport)}<br>${esc(legal)} · ${esc(a.store.support_email)}
 }
 
 export function renderDelivery(a: DeliveryArgs) {
-  const subject = customOf(a.store).subject || T[a.locale].mailSubject(a.store.display_name || a.store.name);
+  const subject = customOf(a.store, a.locale).subject || T[a.locale].mailSubject(a.store.display_name || a.store.name);
   return { subject, html: deliveryHtml(a) };
 }
 
