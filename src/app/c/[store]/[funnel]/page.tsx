@@ -90,7 +90,7 @@ export default async function CheckoutPage({
   const [conn, { count: buyersNow }] = await Promise.all([
     // La llave pública viene con los datos cacheados del checkout: sin otra consulta (y anda aunque la base falle).
     // Con Whop no se consulta Stripe: una consulta menos y una llave menos al navegador.
-    pasarelaParaComprador(s, country) === "whop"
+    pasarelaParaComprador(s, country) !== "stripe"
       ? Promise.resolve({ publishableKey: "" })
       : data.publishableKey ? Promise.resolve({ publishableKey: data.publishableKey }) : stripeForStore(s.id),
     // Barra de compradores con el número real: checkouts de esta oferta
@@ -114,6 +114,8 @@ export default async function CheckoutPage({
       {/* Se precalienta solo la pasarela que esta tienda va a montar. */}
       {gateway === "whop" ? (
         <link rel="preconnect" href="https://js.whop.com" />
+      ) : gateway === "mercadopago" ? (
+        <link rel="preconnect" href="https://sdk.mercadopago.com" />
       ) : (
         <>
           {/* Stripe.js se baja mientras el navegador arma la página. */}

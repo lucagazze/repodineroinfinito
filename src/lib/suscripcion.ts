@@ -1,6 +1,8 @@
 import { createHmac, timingSafeEqual } from "crypto";
 import { db } from "@/lib/db";
 import { aNumero, conexionDe, montoCobrado, type PagoWhop } from "@/lib/whop";
+import { cancelarPreapproval } from "@/lib/mercadopago";
+import { conexionDe as conexionMP } from "@/lib/mercadopago-connect";
 
 /**
  * Cobro recurrente: el nivel pago de la carta semanal.
@@ -346,6 +348,11 @@ export async function cancelarEnPasarela(
   provider: string | null | undefined, storeId: string, externalId: string,
 ) {
   if (provider === "whop") return cancelarEnWhop(storeId, externalId);
+  if (provider === "mercadopago") {
+    const conn = await conexionMP(storeId);
+    if (!conn) throw new Error("la tienda no tiene Mercado Pago conectado");
+    return cancelarPreapproval(conn.token, externalId);
+  }
   throw new Error(`no se sabe cancelar una suscripcion de «${provider ?? "sin pasarela"}»`);
 }
 

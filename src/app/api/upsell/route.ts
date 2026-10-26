@@ -83,6 +83,22 @@ export async function POST(req: NextRequest) {
     return cobrarConWhop(req, body, order, whop);
   }
 
+  // LO MISMO QUE ARRIBA, PARA LA TERCERA PASARELA.
+  //   El arreglo del 26/10/2026 distinguia «Whop o lo demas», y mientras hubo
+  //   dos pasarelas «lo demas» era Stripe. Con Mercado Pago conectado deja de
+  //   serlo: un comprador que pago por Mercado Pago caia aqui y se le intentaba
+  //   cobrar por Stripe -- exactamente el fallo que ese arreglo describe.
+  //
+  //   Se para en seco en vez de intentar: cobrar el post-pago sobre una tarjeta
+  //   guardada en Mercado Pago necesita «Pagos automaticos» (MIT), que pide
+  //   autorizacion de su equipo comercial y todavia no la tenemos. Hasta que
+  //   exista, un pedido de Mercado Pago NO tiene post-pago de un clic, y decirlo
+  //   es mucho mejor que cobrarle a una tarjeta que no es la suya.
+  if (pasarelaDePedido(order) === "mercadopago") {
+    console.error("[upsell] pedido de Mercado Pago: el cobro con tarjeta guardada todavia no existe:", order.id);
+    return NextResponse.json({ error: "Pasarela no disponible" }, { status: 503 });
+  }
+
   const { stripe, livemode } = await stripeForStore(order.store_id);
   if (!orderChargeable(order.status, livemode)) {
     return NextResponse.json({ error: "Pedido no válido" }, { status: 403 });

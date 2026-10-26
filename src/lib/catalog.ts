@@ -113,6 +113,12 @@ export function checkoutHref(store: { slug: string; domain?: string | null }, fu
  * registro es Whop: la razon social, la direccion y el telefono de contacto que
  * revisa un procesador los pone Whop, no la tienda. Con Stripe la tienda es el
  * comerciante y si hace falta.
+ *
+ * CON MERCADO PAGO TAMBIEN HACE FALTA, y por eso este `!== "whop"` se queda
+ * como esta aunque se parezca a los que hubo que cambiar al sumar la tercera
+ * pasarela. Mercado Pago es un procesador, no el comerciante de registro: la
+ * tienda sigue siendo la que vende. La pregunta de esta funcion no es «cobra
+ * con Stripe» sino «es la tienda el comerciante», que son distintas.
  */
 export function phoneRequired(s: { gateway?: string | null }): boolean {
   return (s.gateway ?? "stripe") !== "whop";

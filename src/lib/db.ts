@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import type { Pasarela } from "./pasarela";
 
 /**
  * Acceso a datos. Siempre desde el servidor con la secret key: las tablas
@@ -86,7 +87,7 @@ export type Store = {
   /** Configuración de medios de pago de Stripe (la de la plataforma anterior). */
   stripe_pmc?: string | null;
   /** Pasarela con la que cobra: stripe | whop. El checkout monta una sola. */
-  gateway?: "stripe" | "whop";
+  gateway?: Pasarela;
   timezone?: string;
   email_from?: string | null;
   legal_name?: string | null;

@@ -1,6 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import { db, legalOf, type Store } from "@/lib/db";
+import { pasarelaDeTienda } from "@/lib/pasarela";
 import { decrypt, mask } from "@/lib/secrets";
 import { stripeForStore, dashboardUrl } from "@/lib/stripe";
 import { stripeHealth } from "@/lib/stripe-connect";
@@ -385,7 +386,7 @@ export function registerReadTools(server: McpServer) {
       // Pasarela de cobro. La tienda ELIGE con cual cobra (stores.gateway), asi
       // que revisar Stripe en una tienda de Whop da un "error" que no existe --
       // y un diagnostico que grita en falso entierra los problemas de verdad.
-      const pasarela = s.gateway === "whop" ? "whop" : "stripe";
+      const pasarela = pasarelaDeTienda(s);
       if (pasarela === "whop") {
         const { data: w } = await db.from("store_whop")
           .select("company_id,webhook_id,webhook_secret_enc,livemode,last_event_at")

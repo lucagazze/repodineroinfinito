@@ -1,4 +1,5 @@
 import { withBrand } from "./brand";
+import type { Pasarela } from "./pasarela";
 import { createHmac } from "crypto";
 import { db, getFunnel, getProductById, itemsByRole, type Product } from "./db";
 import { sendDelivery } from "./email";
@@ -30,7 +31,7 @@ const CLAIM_LEASE_MS = 2 * 60_000;
 
 export async function fulfill(args: {
   /** Que pasarela cobro. Define como se lee el id, no como se entrega. */
-  provider?: "stripe" | "whop";
+  provider?: Pasarela;
   /** Id del pago en su pasarela. Se guarda en stripe_payment_intent por
    *  compatibilidad: la columna es anterior a que hubiera dos pasarelas. */
   paymentId: string;

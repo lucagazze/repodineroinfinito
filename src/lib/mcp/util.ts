@@ -1,4 +1,5 @@
 import type { McpServer } from "@modelcontextprotocol/server";
+import type { Pasarela } from "@/lib/pasarela";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { mask } from "@/lib/secrets";
@@ -117,7 +118,7 @@ export const STORE_FULL_COLS =
 export type StoreRow = {
   id: string; slug: string; name: string; display_name: string | null; domain: string | null; catalog_domain: string | null;
   /** Pasarela con la que cobra la tienda: stripe | whop. */
-  gateway?: "stripe" | "whop";
+  gateway?: Pasarela;
   support_email: string; default_locale: string; guarantee_days: number; timezone: string; email_from: string | null;
   legal_name: string | null; legal_address: string | null; statement_descriptor: string | null; logo_url: string | null;
   brand: Record<string, unknown>; business: Record<string, unknown>; thankyou: Record<string, unknown>;

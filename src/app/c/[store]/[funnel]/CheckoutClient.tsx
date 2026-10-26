@@ -1,4 +1,5 @@
 "use client";
+import type { Pasarela } from "@/lib/pasarela";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Inter, DM_Sans } from "next/font/google";
@@ -36,7 +37,7 @@ export type Props = {
    * Con que cobra esta tienda. Es un dato de la tienda, no se adivina: una
    * tienda con las dos pasarelas conectadas tiene que cobrar con la que eligio.
    */
-  gateway: "stripe" | "whop";
+  gateway: Pasarela;
   /** biz_...: la cuenta de Whop, solo si gateway es "whop". */
   whopAccountId: string | null;
   /** Configuración de medios de pago de Stripe de la tienda (la misma que la plataforma anterior). */
@@ -232,6 +233,12 @@ export default function CheckoutClient(p: Props) {
             // decida es peor que no cobrar.
             <p className="ck-err">{t.ckPayNotDone}</p>
           )
+        ) : p.gateway === "mercadopago" ? (
+          // La tienda cobra con Mercado Pago pero el formulario del comprador
+          // todavia no existe (falta el motor y /api/mercadopago/pay). Se dice
+          // que no se puede cobrar, igual que con Whop sin cuenta: caerse a
+          // Stripe en silencio cobraria por una pasarela que nadie eligio.
+          <p className="ck-err">{t.ckPayNotDone}</p>
         ) : stripePromise ? (
           <Elements
             stripe={stripePromise}

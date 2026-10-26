@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { pasarelaDeTienda, type Pasarela } from "@/lib/pasarela";
 import { decrypt } from "@/lib/secrets";
 import { checkoutUrl } from "@/lib/checkout-url";
 import { offerList } from "./offers";
@@ -203,7 +204,10 @@ async function pageChecks(storeId: string, offers: Awaited<ReturnType<typeof off
   // asi que preguntarle a Stripe devolvia "no hay Stripe conectado" y salia como
   // un problema del checkout cuando no lo es.
   const { data: st } = await db.from("stores").select("gateway").eq("id", storeId).maybeSingle();
-  const conStripe = ((st?.gateway as string | null) ?? "stripe") !== "whop";
+  // `!== "whop"` ya no alcanza: con tres pasarelas eso incluye Mercado Pago,
+  // y preguntarle a Stripe por una tienda de Mercado Pago da el mismo falso
+  // problema que este comentario describe para Whop.
+  const conStripe = pasarelaDeTienda(st as { gateway?: Pasarela } | null) === "stripe";
   const [wallet, ...https] = await Promise.all([
     conStripe ? checkWallet(storeId) : Promise.resolve({ ok: true, domains: [], error: "" }),
     ...rows.map((r) => checkHttp(r.url)),

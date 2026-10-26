@@ -307,3 +307,72 @@ Lo que todavia NO esta verificado y conviene medir, no suponer: si la
 cancelacion de Mercado Pago es inmediata o a fin de periodo. Su documentacion
 no lo dice, y de eso depende si alguien que se da de baja conserva el acceso
 que ya pago — que es como esta escrito `sub_baja`.
+
+---
+
+## Paso 3b · El modulo de Mercado Pago — ESCRITO el 26/10/2026
+
+### Lo que hay
+
+| archivo | que es | probado |
+|---|---|---|
+| `lib/mercadopago-firma.ts` | verificacion de firma HMAC | **22 casos**, sin red |
+| `lib/mercadopago.ts` | cliente: preapproval, cancelar, pago autorizado | **33 casos** las funciones puras |
+| `lib/mercadopago-connect.ts` | conectar/desconectar, secretos cifrados | — |
+| `lib/mercadopago-events.ts` | cobro, rechazo y baja informada | — |
+| `api/mercadopago/webhook/[storeId]` | la ruta | compila y se registra |
+| migracion 010 | `store_mercadopago` + `gateway` acepta el valor | aplicada |
+
+Suscripcion **sin plan asociado**: el monto y la frecuencia van dentro del
+preapproval. Asi no hay un id de plan que mantener sincronizado a mano con el
+precio de la base — que es el problema que ya existe con `whop_plan_id`.
+
+### Las tres decisiones que importan
+
+**1 · La firma cubre el `data.id` del QUERY STRING, no el cuerpo.** El cuerpo no
+esta firmado en absoluto. Si se usara el del cuerpo, alguien que vio un webhook
+valido podria reenviarlo dentro de la ventana con otro id adentro y la firma
+seguiria dando bien. La ruta usa el firmado y descarta el del cuerpo.
+
+**2 · El `ts` viene en segundos O en milisegundos.** No es paranoia: sus dos
+paginas de documentacion muestran `ts=1704908010` (segundos) y
+`ts=1742505638683` (milisegundos). Tomar una sola forma rechazaria todos los
+webhooks de la otra por un desfase de decadas.
+
+**3 · La plantilla que se firma no esta en su documentacion.** Dice
+«HMAC-based Webhook Signature Verification» y muestra la funcion, pero nunca
+pone la cadena. `id:…;request-id:…;ts:…;` sale de sus SDK y de
+implementaciones que coinciden. Como no es fuente oficial, se prueban tres
+variantes y la ruta **registra cual coincidio** — el primer webhook real cierra
+la pregunta en vez de dejar tres pruebas para siempre.
+
+### Un fallo del paso 1 que reaparecio
+
+`api/upsell` distinguia «Whop o lo demas», y mientras hubo dos pasarelas «lo
+demas» era Stripe. Con Mercado Pago como valor real deja de serlo: un comprador
+que pago por Mercado Pago caia en la rama de Stripe — **exactamente el fallo
+que el arreglo del paso 1 describe en su propio comentario**. Ahora para en
+seco con un 503, porque el cobro sobre tarjeta guardada de Mercado Pago sigue
+bloqueado por la autorizacion comercial.
+
+Lo mismo en el checkout: una tienda en `mercadopago` montaba el formulario de
+**Stripe**. Ahora dice que no puede cobrar, igual que Whop sin cuenta conectada.
+
+Y `Pasarela` dejo de declararse a mano en cuatro archivos: el typecheck
+encontro el unico sitio donde «dos pasarelas» estaba grabado en un tipo.
+
+### LO QUE FALTA PARA QUE ESTO COBRE
+
+1. **El motor del comprador**: `motor-mercadopago.tsx` y `api/mercadopago/pay`.
+   Hoy la tienda puede conectarse y recibir webhooks, pero el checkout NO puede
+   cobrar — y lo dice en vez de fingir.
+2. **Una prueba en el sandbox**, que contesta tres cosas de una:
+   - cual de las tres variantes de firma es la real
+   - los valores de `status` de un pago autorizado. `clasificarPago` devuelve
+     «desconocido» ante lo que no reconoce y lo deja crudo en la bitacora sin
+     acreditar ni rechazar, justamente para que esto se vea y no se adivine
+   - **si `cancelled` corta en el acto o a fin de periodo.** `sub_baja` supone
+     que el suscriptor conserva el mes que pago, que es lo que promete la
+     pagina de baja
+3. **Credenciales**: access token y secreto de firma del webhook, creado en
+   «Tus integraciones». Sin el secreto nada se acredita.

@@ -21,9 +21,9 @@ import type { Store } from "./db";
  *
  *   Nunca se usa la primera donde corresponde la segunda.
  */
-export type Pasarela = "stripe" | "whop";
+export type Pasarela = "stripe" | "whop" | "mercadopago";
 
-export const PASARELAS: readonly Pasarela[] = ["stripe", "whop"] as const;
+export const PASARELAS: readonly Pasarela[] = ["stripe", "whop", "mercadopago"] as const;
 
 function esPasarela(v: unknown): v is Pasarela {
   return typeof v === "string" && (PASARELAS as readonly string[]).includes(v);
@@ -35,7 +35,11 @@ function esPasarela(v: unknown): v is Pasarela {
  * presencia haría cobrar a la que se conectó último.
  */
 export function pasarelaDeTienda(store: Pick<Store, "gateway"> | null | undefined): Pasarela {
-  return store?.gateway === "whop" ? "whop" : "stripe";
+  // Se valida contra la lista en vez de comparar con una: mientras hubo dos
+  // pasarelas, `gateway === "whop" ? "whop" : "stripe"` daba lo mismo, pero con
+  // una tercera mandaba a Stripe cualquier tienda que no fuera Whop -- o sea,
+  // una tienda de Mercado Pago habria intentado cobrar por Stripe.
+  return esPasarela(store?.gateway) ? store!.gateway as Pasarela : "stripe";
 }
 
 /**
@@ -57,11 +61,12 @@ export function pasarelaDePedido(order: { provider?: string | null } | null | un
  * el día que se agregue Mercado Pago no hay que ir a buscarlo a quince
  * lugares.
  *
- * La REGLA de enrutado -- qué países van a qué pasarela -- no se guarda
- * todavia, y es deliberado: `resolveSettings` solo valida booleanos, numeros y
- * cadenas, asi que una lista de reglas metida ahi se descartaria en silencio.
- * Donde se guarda se decide cuando haya una segunda pasarela de verdad contra
- * la que probarlo, no antes.
+ * La REGLA de enrutado -- qué países van a qué pasarela -- sigue sin
+ * guardarse, y sigue siendo deliberado: `resolveSettings` solo valida
+ * booleanos, numeros y cadenas, asi que una lista de reglas metida ahi se
+ * descartaria en silencio. Ahora que Mercado Pago existe como modulo, lo que
+ * falta para decidirlo es una tienda cobrando por el de verdad: recien
+ * entonces se sabe si la regla es por pais, por moneda o por producto.
  */
 export function pasarelaParaComprador(
   store: Pick<Store, "gateway"> | null | undefined,
