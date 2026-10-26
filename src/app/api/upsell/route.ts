@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse, after } from "next/server";
+import { pasarelaDePedido } from "@/lib/pasarela";
 import type Stripe from "stripe";
 import { stripeForStore } from "@/lib/stripe";
 import { db, getProductById } from "@/lib/db";
@@ -70,7 +71,7 @@ export async function POST(req: NextRequest) {
   //
   // `orders.provider` ya se guarda desde fulfill.ts y esta poblado en todos los
   // pedidos: solo habia que leerlo.
-  if (order.provider === "whop") {
+  if (pasarelaDePedido(order) === "whop") {
     const whop = await conexionDe(order.store_id);
     if (!whop) {
       // El pedido se cobro por Whop y la tienda ya no lo tiene conectado. Caer

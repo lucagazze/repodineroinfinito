@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { pasarelaDePedido } from "@/lib/pasarela";
 import { withBrand } from "@/lib/brand";
 import { after } from "next/server";
 import { db } from "@/lib/db";
@@ -53,7 +54,7 @@ export default async function Oferta({
   // funcionaba con dos pasarelas y deja de funcionar con tres: un pedido de
   // otra pasarela heredaria el `livemode` de Whop solo porque la tienda lo
   // tiene conectado.
-  const whop = order.provider === "whop" ? await conexionDe(order.store_id) : null;
+  const whop = pasarelaDePedido(order) === "whop" ? await conexionDe(order.store_id) : null;
   const stripeCfg = whop ? null : await stripeForStore(order.store_id);
   const livemode = whop ? whop.livemode : stripeCfg!.livemode;
   // VER, no cobrar: un pedido de prueba tiene que poder recorrer estas

@@ -80,29 +80,43 @@ tarjeta—; ahora devuelve 503 y deja el pedido en los registros.
 **Verificado:** `tsc --noEmit` limpio. Falta la prueba de verdad, que es un
 pedido real de cada pasarela recorriendo el post-pago.
 
-## Paso 2 · Elegir la pasarela por país
+## Paso 2 · Elegir la pasarela por país — A MEDIAS el 26/10/2026, a propósito
 
-Hoy `stores.gateway` es una por tienda. Para que un argentino vea Mercado Pago
-y un español vea tarjeta, la elección tiene que depender del comprador.
+**Hecho: la regla vive en un solo sitio.** `src/lib/pasarela.ts` con tres
+funciones, y la distinción que el fallo del paso 1 demostró que hacía falta:
 
-1. Decidir dónde vive la regla. Lo más simple que funciona:
-   `funnels.settings.gateways` con una lista de `{paises: [...], gateway: "..."}`
-   y un `gateway` por defecto. Queda junto al resto de la configuración del
-   embudo y no toca el esquema.
-2. Una función `pasarelaPara(funnel, pais)` que devuelva la pasarela. **Un solo
-   sitio que decide**, y los 15 puntos de arriba pasan a llamarla.
-3. Convertir esos 15 puntos de binario a plural.
-4. El país del comprador ya se detecta para la moneda: se reutiliza.
+| función | contesta | se usa para |
+|---|---|---|
+| `pasarelaDeTienda` | con qué cobra esta tienda | configuración, panel |
+| `pasarelaDePedido` | con qué se cobró ESTE pedido | post-pago, renovación, reembolso |
+| `pasarelaParaComprador` | con qué va a cobrar este comprador | el checkout, antes de que haya pedido |
 
-**El riesgo real:** el país se conoce *antes* de pagar sólo por geolocalización,
-que falla. Hay que decidir qué pasa si el comprador elige otro país en el
-formulario de facturación después de que el checkout ya montó un motor.
-Recomendación: **ofrecer las dos y que elija**, en vez de adivinar y bloquear.
+El camino del comprador ya no tiene ninguna decisión suelta: el checkout, el
+cobro de un clic y la página del post-pago llaman a estas funciones. Las seis
+que quedan están en panel, diagnóstico y MCP, y ahí la pregunta **sí** es de la
+tienda, así que se quedan.
 
-**Qué desbloquea:** poder tener dos pasarelas vivas a la vez. Sin esto, sumar
-Mercado Pago significa apagar Whop.
+`pasarelaParaComprador` ya recibe el país. Hoy no lo usa.
 
----
+**NO hecho, y es deliberado: dónde se guarda la regla de enrutado.**
+
+El plan proponía `funnels.settings.gateways`. Al ir a escribirlo apareció que
+`resolveSettings` **solo valida booleanos, números y cadenas**: una lista de
+reglas metida ahí se descartaría en silencio, que es exactamente la clase de
+fallo que este plan existe para evitar.
+
+Las alternativas son una columna propia o una tabla, y las dos son decisiones
+de esquema que conviene tomar con la segunda pasarela delante — sabiendo qué
+necesita de verdad — y no antes. Diseñar un esquema para un requisito que no se
+puede probar es como se llega a tener dos verdades.
+
+**Lo que esto deja listo:** el día que exista Mercado Pago, enrutar por país es
+cambiar `pasarelaParaComprador` y decidir dónde se guarda la regla. No hay que
+tocar el checkout ni el post-pago.
+
+**Verificado:** `tsc --noEmit` limpio y `next build` completo. El
+comportamiento es idéntico — `pasarelaDeTienda` devuelve literalmente la misma
+expresión que estaba repetida antes.
 
 ## Paso 3 · Mercado Pago como tercera pasarela
 

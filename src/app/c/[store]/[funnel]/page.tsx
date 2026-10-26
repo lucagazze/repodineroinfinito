@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { pasarelaParaComprador } from "@/lib/pasarela";
 import { brandFor } from "@/lib/brand";
 import { notFound } from "next/navigation";
 import { headers } from "next/headers";
@@ -89,7 +90,7 @@ export default async function CheckoutPage({
   const [conn, { count: buyersNow }] = await Promise.all([
     // La llave pública viene con los datos cacheados del checkout: sin otra consulta (y anda aunque la base falle).
     // Con Whop no se consulta Stripe: una consulta menos y una llave menos al navegador.
-    s.gateway === "whop"
+    pasarelaParaComprador(s, country) === "whop"
       ? Promise.resolve({ publishableKey: "" })
       : data.publishableKey ? Promise.resolve({ publishableKey: data.publishableKey }) : stripeForStore(s.id),
     // Barra de compradores con el número real: checkouts de esta oferta
@@ -103,10 +104,10 @@ export default async function CheckoutPage({
   const brand = (s.brand ?? {}) as { payButton?: string; guaranteeImage?: string };
   const legal = legalOf(s);
 
-  // Con qué cobra esta tienda. Es un dato de la tienda y no se deduce de qué
-  // conexión existe: durante una migración las dos conviven y adivinar por
-  // presencia haría cobrar a la que se conectó último.
-  const gateway: "stripe" | "whop" = s.gateway === "whop" ? "whop" : "stripe";
+  // Con qué cobra este comprador. La regla vive en lib/pasarela.ts y en ningún
+  // otro sitio: repetida es como diverge, y la vez que divergió -- el cobro de
+  // un clic del post-pago -- iba a cobrarle a la tarjeta equivocada.
+  const gateway = pasarelaParaComprador(s, country);
 
   return (
     <>
