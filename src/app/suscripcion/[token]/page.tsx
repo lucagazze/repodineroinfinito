@@ -22,7 +22,7 @@ export const metadata = { robots: { index: false, follow: false } };
 
 const COLS =
   "id,store_id,email,name,status,founder,amount,currency,payments_count,paid_total," +
-  "started_at,current_period_end,last_payment_at,failed_count,whop_membership_id";
+  "started_at,current_period_end,last_payment_at,failed_count,provider,external_id";
 
 export default async function Page({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;

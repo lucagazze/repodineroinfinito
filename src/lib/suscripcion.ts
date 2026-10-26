@@ -150,6 +150,7 @@ export async function registrarCobroSuscripcion(storeId: string, pago: PagoWhop)
     p_pm: pago.payment_method_id ?? pago.payment_method?.id ?? null,
     p_period_days: quien.producto.billing_period_days ?? null,
     p_period_end: null,
+    p_provider: "whop",
     // El fundador se decide por el plan que esta pagando, no recalculando la
     // fecha: si entro por el plan de fundador, lo es, y lo sigue siendo.
     p_founder: quien.fundador,
@@ -176,6 +177,7 @@ export async function registrarFalloSuscripcion(storeId: string, pago: PagoWhop)
     p_product: quien.producto.id,
     p_membership: membresia,
     p_motivo: motivoDe(pago),
+    p_provider: "whop",
   });
   if (error) throw new Error(`sub_fallo: ${error.message}`);
   return { ...((data ?? {}) as unknown as FalloSub), producto: quien.producto };
@@ -251,23 +253,27 @@ export async function membresiaWhop(
     // No es de la suscripcion, o no se pudo leer el plan. Se registra crudo
     // para poder mirarlo, y no se toca ninguna suscripcion.
     await db.from("subscription_events").insert({
-      store_id: storeId, kind: "desconocido", whop_membership_id: id,
+      store_id: storeId, kind: "desconocido", provider: "whop", external_id: id,
       detail: `membership.${tipo} sin plan reconocido`, raw: dato as never,
     });
     return { ignorado: `membership.${tipo}` };
   }
 
   // Por la membresia o por el miembro: el evento no trae correo.
-  const o = [id ? `whop_membership_id.eq.${id}` : "", miembro ? `whop_member_id.eq.${miembro}` : ""]
+  const o = [id ? `external_id.eq.${id}` : "", miembro ? `external_customer_id.eq.${miembro}` : ""]
     .filter(Boolean).join(",");
+  // `.eq("provider","whop")` no es decorativo: los ids externos son unicos POR
+  // pasarela, no en absoluto. Sin este filtro, un preapproval de Mercado Pago
+  // que se escriba igual que una membresia de Whop daria de baja al suscriptor
+  // equivocado.
   const { data: sub } = o
     ? await db.from("subscriptions").select("id,email,status,current_period_end")
-        .eq("store_id", storeId).or(o).limit(1).maybeSingle()
+        .eq("store_id", storeId).eq("provider", "whop").or(o).limit(1).maybeSingle()
     : { data: null };
 
   if (!sub) {
     await db.from("subscription_events").insert({
-      store_id: storeId, kind: "desconocido", whop_membership_id: id,
+      store_id: storeId, kind: "desconocido", provider: "whop", external_id: id,
       detail: `membership.${tipo} de una membresia que no esta en la base`,
       raw: dato as never,
     });
@@ -278,8 +284,8 @@ export async function membresiaWhop(
   // periodo real vale mas que sumarle 30 dias al ultimo cobro, y de el depende
   // hasta cuando entra alguien que se dio de baja.
   const guardar: Record<string, unknown> = { updated_at: new Date().toISOString() };
-  if (id) guardar.whop_membership_id = id;
-  if (miembro) guardar.whop_member_id = miembro;
+  if (id) guardar.external_id = id;
+  if (miembro) guardar.external_customer_id = miembro;
   if (hasta) guardar.current_period_end = hasta;
   if (dias) guardar.billing_period_days = dias;
   if (precio !== null && precio > 0) guardar.amount = precio;
@@ -302,7 +308,7 @@ export async function membresiaWhop(
 
   await db.from("subscription_events").insert({
     store_id: storeId, subscription_id: sub.id, email: sub.email,
-    kind: "desconocido", whop_membership_id: id,
+    kind: "desconocido", provider: "whop", external_id: id,
     detail: `membership.${tipo}${estado ? ` (${estado})` : ""}`, raw: dato as never,
   });
   return { visto: `membership.${tipo}`, suscripcion: sub.id, estado, hasta };
@@ -322,6 +328,25 @@ export async function cancelarEnWhop(storeId: string, membershipId: string) {
   const texto = await r.text();
   if (!r.ok) throw new Error(`Whop ${r.status}: ${texto.slice(0, 300)}`);
   return texto ? (JSON.parse(texto) as Record<string, unknown>) : {};
+}
+
+/**
+ * Cancelar donde de verdad se cobra.
+ *
+ * La pasarela sale de la SUSCRIPCION, no de la tienda: si la tienda cambia de
+ * pasarela, a los suscriptores viejos los sigue cobrando la vieja, y pedirle la
+ * baja a la nueva no detiene nada. Mismo razonamiento que `pasarelaDePedido`
+ * en lib/pasarela.ts, por el que ya se arreglo un fallo en el upsell.
+ *
+ * Tira si no sabe cancelar en esa pasarela, en vez de devolver silencio: quien
+ * llama necesita poder decir «anotada pero alla sigue cobrando», que es
+ * exactamente lo que hace la ruta de baja.
+ */
+export async function cancelarEnPasarela(
+  provider: string | null | undefined, storeId: string, externalId: string,
+) {
+  if (provider === "whop") return cancelarEnWhop(storeId, externalId);
+  throw new Error(`no se sabe cancelar una suscripcion de «${provider ?? "sin pasarela"}»`);
 }
 
 /**
@@ -361,12 +386,14 @@ export type Suscriptor = {
   started_at: string; current_period_end: string | null; last_payment_at: string | null;
   failed_count: number; locale: string | null; country: string | null;
   billing_period_days: number | null;
-  whop_membership_id: string | null;
+  provider: string;
+  external_id: string | null;
 };
 
 const SUB_COLS =
   "id,email,name,status,founder,amount,currency,payments_count,paid_total,started_at," +
-  "current_period_end,last_payment_at,failed_count,locale,country,billing_period_days,whop_membership_id";
+  "current_period_end,last_payment_at,failed_count,locale,country,billing_period_days," +
+  "provider,external_id";
 
 /** Los que HOY tienen acceso. Lee la VISTA: una sola definicion de acceso en todo el sistema. */
 export async function conAcceso(storeId: string): Promise<Suscriptor[]> {
@@ -416,7 +443,7 @@ export async function resumen(storeId: string) {
 
 export async function bitacora(subId: string, limite = 50) {
   const { data } = await db
-    .from("subscription_events").select("kind,amount,currency,detail,whop_payment_id,at")
+    .from("subscription_events").select("kind,amount,currency,detail,provider,external_payment_id,at")
     .eq("subscription_id", subId).order("at", { ascending: false }).limit(limite);
   return data ?? [];
 }

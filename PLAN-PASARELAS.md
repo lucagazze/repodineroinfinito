@@ -208,3 +208,80 @@ criterios que aplican. Eso se pregunta, no se deduce.
 
 Los pasos 2 y 3 juntos son varios días de trabajo y tocan el cobro, que es la
 parte del sistema donde un error cuesta dinero de verdad.
+
+---
+
+## Paso 3a · Los 9/mes — ESCRITO Y VERIFICADO el 26/10/2026, SIN APLICAR
+
+### Lo que se encontro al empezar
+
+La suscripcion no esta acoplada a Whop en el codigo: lo esta en el ESQUEMA.
+`subscriptions.whop_membership_id`, `subscription_events.whop_payment_id`.
+
+Eso no es cosmetico. **Lo que impide contar dos veces una renovacion son dos
+indices unicos sobre `whop_payment_id`** (migracion 007, escrita despues de
+medir 4 pagos y USD 76 donde hubo 3 y USD 57). Un cobro de Mercado Pago no
+entra en esa columna, asi que entraria SIN esa proteccion — y Mercado Pago
+reintenta los webhooks.
+
+Y hay **cero filas** en `subscriptions`. Nadie se suscribio nunca, por ninguna
+pasarela. Es el momento mas barato de la vida del proyecto para renombrar, y esa
+ventana se cierra el dia que alguien se suscribe.
+
+### Lo que esta hecho
+
+`supabase/migraciones/009-suscripcion-pasarela.sql`, 376 lineas:
+
+- `provider` en las dos tablas, con check `('whop','stripe','mercadopago')`
+- `whop_membership_id` → `external_id`, y las otras tres de `subscriptions`
+- `whop_payment_id` → `external_payment_id` en la bitacora
+- los dos indices de idempotencia pasan a `(provider, external_payment_id)`
+- `sub_cobro` y `sub_fallo` reciben `p_provider`. Se DROPEAN antes de crearse:
+  sumar un parametro en Postgres crea una SEGUNDA funcion, y con las dos vivas
+  PostgREST falla por ambiguedad
+- `sub_vencer` y `sub_baja` se recrean para que sus eventos hereden la pasarela
+  de la suscripcion en vez del default `'whop'`
+- `sub_cobro` detecta y anota el caso de **cambio de pasarela**: la clave unica
+  es (tienda, producto, mail) sin pasarela, asi que alguien suscripto por Whop
+  que se suscribe por Mercado Pago actualiza la fila que habia, y si la
+  membresia vieja sigue viva lo estan cobrando DOS VECES. No se puede arreglar
+  dentro de una transaccion — cancelar es una llamada HTTP — asi que se deja en
+  la bitacora y se devuelve `cambio_pasarela: true`
+
+Y en el codigo: `suscripcion.ts`, `api/suscripcion/baja`, `suscripcion/[token]`.
+Nuevo `cancelarEnPasarela(provider, ...)`: la baja cancela donde de verdad se
+cobra, que lo dice la SUSCRIPCION y no la tienda — el mismo razonamiento de
+`pasarelaDePedido` que ya arreglo un fallo en el upsell.
+
+NO se tocaron `products.whop_plan_id`, `funnels.whop_plan_id` ni
+`orders.whop_member_id`: son del camino del upsell, los leen ocho scripts, y
+Mercado Pago no necesita un id de plan (su suscripcion lleva el monto y la
+frecuencia adentro: preapproval sin plan asociado).
+
+Verificado: `tsc --noEmit` limpio y `next build` completo.
+
+### POR QUE NO ESTA APLICADO, Y QUE FALTA
+
+La migracion renombra columnas en la base de produccion y quedo **bloqueada por
+permisos**. Hasta que se aplique:
+
+> **NO HACER PUSH DE ESTA RAMA.** El codigo ya lee `external_id` y la base
+> todavia tiene `whop_membership_id`. Desplegar primero rompe el panel de
+> suscripciones y la ruta de baja.
+
+El orden correcto es: aplicar la migracion, comprobar el esquema, y recien
+entonces hacer push. Entre las dos cosas hay una ventana en la que el panel de
+suscripciones da error — con cero suscriptores, no afecta a nadie que pague.
+
+### Lo que viene despues, con las formas ya verificadas
+
+| | |
+|---|---|
+| crear | `POST https://api.mercadopago.com/preapproval` con `reason`, `external_reference`, `payer_email`, `back_url`, `status: "pending"` y `auto_recurring {frequency, frequency_type, transaction_amount, currency_id}`. Devuelve `id` e `init_point`, que es la URL a la que se manda al comprador |
+| cancelar | `PUT /preapproval/{id}` con `{"status":"cancelled"}`. Estados: `authorized`, `paused`, `cancelled` |
+| webhooks | topics `subscription_preapproval` y `subscription_authorized_payment`. Cuerpo `{type, action, data.id}`; firma HMAC en `x-signature` (`ts=…,v1=…`) mas `x-request-id` |
+
+Lo que todavia NO esta verificado y conviene medir, no suponer: si la
+cancelacion de Mercado Pago es inmediata o a fin de periodo. Su documentacion
+no lo dice, y de eso depende si alguien que se da de baja conserva el acceso
+que ya pago — que es como esta escrito `sub_baja`.

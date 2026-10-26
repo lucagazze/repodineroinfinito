@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { cancelarEnWhop, leerBaja, suscripcionDe } from "@/lib/suscripcion";
+import { cancelarEnPasarela, leerBaja, suscripcionDe } from "@/lib/suscripcion";
 import { avisarBaja } from "@/lib/suscripcion-eventos";
 
 export const runtime = "nodejs";
@@ -29,13 +29,13 @@ export async function POST(req: NextRequest) {
 
   const { data } = await db
     .from("subscriptions")
-    .select("id,store_id,email,status,current_period_end,whop_membership_id")
+    .select("id,store_id,email,status,current_period_end,provider,external_id")
     .eq("id", id).maybeSingle();
   if (!data) return NextResponse.json({ error: "We can't find that subscription" }, { status: 404 });
 
   const sub = data as {
     id: string; store_id: string; email: string; status: string;
-    current_period_end: string | null; whop_membership_id: string | null;
+    current_period_end: string | null; provider: string | null; external_id: string | null;
   };
 
   // Ya cancelada: se contesta ok. Volver a apretar el botón no es un error, y
@@ -44,34 +44,38 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, hasta: sub.current_period_end, ya: true });
   }
 
-  let whop: string | null = null;
-  if (sub.whop_membership_id) {
+  // Donde se cancela lo dice la suscripcion, no la tienda: al que entro por
+  // una pasarela lo sigue cobrando esa, aunque la tienda ya use otra.
+  let falla: string | null = null;
+  if (sub.external_id) {
     try {
-      await cancelarEnWhop(sub.store_id, sub.whop_membership_id);
+      await cancelarEnPasarela(sub.provider, sub.store_id, sub.external_id);
     } catch (e) {
-      whop = (e as Error).message.slice(0, 300);
-      console.error("[suscripcion] no pude cancelar en Whop", sub.whop_membership_id, whop);
+      falla = (e as Error).message.slice(0, 300);
+      console.error("[suscripcion] no pude cancelar en", sub.provider, sub.external_id, falla);
     }
   } else {
-    whop = "la suscripción no tiene membresía de Whop enlazada";
+    falla = `la suscripción no tiene id de ${sub.provider ?? "la pasarela"} enlazado`;
   }
 
   const { error } = await db.rpc("sub_baja", {
     p_id: sub.id,
-    p_motivo: whop ? `baja del suscriptor; EN WHOP NO SE PUDO: ${whop}` : "baja del suscriptor",
+    p_motivo: falla
+      ? `baja del suscriptor; EN ${(sub.provider ?? "LA PASARELA").toUpperCase()} NO SE PUDO: ${falla}`
+      : "baja del suscriptor",
     p_ya: false,
   });
   if (error) {
     return NextResponse.json({ error: "We couldn't record the cancellation" }, { status: 500 });
   }
 
-  // Si Whop quedó cobrando, es un aviso que hay que ver: va a la bitácora con
-  // un tipo propio para que salte en el panel.
-  if (whop) {
+  // Si la pasarela quedó cobrando, es un aviso que hay que ver: va a la
+  // bitácora con un tipo propio para que salte en el panel.
+  if (falla) {
     await db.from("subscription_events").insert({
       subscription_id: sub.id, store_id: sub.store_id, email: sub.email,
-      kind: "desconocido",
-      detail: `ATENCION: la baja se anoto pero Whop sigue cobrando. ${whop}`,
+      kind: "desconocido", provider: sub.provider ?? "whop",
+      detail: `ATENCION: la baja se anoto pero ${sub.provider ?? "la pasarela"} sigue cobrando. ${falla}`,
     });
   }
 
@@ -80,5 +84,5 @@ export async function POST(req: NextRequest) {
     id: sub.id, email: sub.email, hasta: sub.current_period_end, producto: prod,
   }).catch((e) => console.error("[suscripcion] mail de baja:", (e as Error).message));
 
-  return NextResponse.json({ ok: true, hasta: sub.current_period_end, whop: whop ?? "cancelada" });
+  return NextResponse.json({ ok: true, hasta: sub.current_period_end, pasarela: falla ?? "cancelada" });
 }
