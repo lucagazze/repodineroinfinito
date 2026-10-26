@@ -137,19 +137,58 @@ El molde existe y es Whop. Lo que hay que escribir, con su equivalente al lado:
 Más el alta en el panel y el cifrado de credenciales, que ya existe y se
 reutiliza (`SECRETS_KEY`, AES-256-GCM).
 
-**La pregunta que decide si el paso 3 vale la pena**, y hay que contestarla
-ANTES de escribir una línea:
+### La pregunta que decidía el paso 3 — CONTESTADA el 26/10/2026
 
 > ¿Mercado Pago permite cobrar con una tarjeta ya guardada, sin que el
 > comprador vuelva a intervenir?
 
-Toda la cadena de post-pago —27 → 29 → 9/mes— depende de eso. Si no lo permite
-con la misma facilidad que Whop, **los pagos que entren por Mercado Pago pierden
-el post-pago entero**, y eso cambia por completo la cuenta de si conviene.
+**Sí, pero no con el producto que uno supondría, y pide un permiso que hoy no
+tenemos.** Hay tres caminos y sólo uno sirve para el post-pago:
 
-Mercado Pago sí tiene suscripciones (preapproval) —se usó en el sistema de
-abonos del lavadero— pero un cobro suelto sobre tarjeta guardada es otra cosa y
-hay que verificarlo en su documentación antes de comprometerse.
+| camino | ¿cobra sin el comprador? | permiso | sirve para |
+|---|---|---|---|
+| Checkout API · tarjetas guardadas | **No** — exige el CVV cada vez | ninguno | un 1-clic con un campo de CVV |
+| Suscripciones (`/preapproval`) | **Sí**, en su ciclo | ninguno | los 9/mes |
+| **Pagos automáticos** (MIT) | **Sí**, monto y momento libres | **autorización comercial** | el salto de 27 → 29 |
+
+Lo literal de cada uno, de la documentación oficial:
+
+- Tarjetas guardadas: «Para que un cliente efectúe un pago con tarjetas
+  guardadas, debes capturar nuevamente el código de seguridad (CVV) de la
+  tarjeta, ya que Mercado Pago no almacena este dato por razones de seguridad.»
+  No es un detalle de implementación: es el diseño del producto.
+- Pagos automáticos: «Realiza pagos recurrentes, pagos únicos sin fricción y
+  one-click payments sin solicitar el CVV», con «transacciones procesadas
+  automáticamente, sin intervención del cliente». Y el requisito: «Es necesario
+  contar con la autorización del equipo Comercial para poder utilizar esta
+  solución.»
+
+El cobro suelto se marca en el propio `POST /v1/payments`:
+
+```
+point_of_interaction.type     = "CREDENTIAL_ON_FILE"
+point_of_interaction.sub_type = "unscheduled"   // "recurring" para suscripción
+transaction_initiator         = "merchant"      // MIT, no CIT
+```
+
+**Aviso para quien lo implemente:** Mercado Pago tiene dos generaciones de API
+conviviendo y los campos **no se llaman igual**. La vieja (`/v1/payments`) usa
+`point_of_interaction` y `transaction_initiator`; la nueva, de Orders, usa
+`payment_initiator`, `reason` y `first_payment`. Copiar un ejemplo de la
+generación equivocada compila y falla en producción. Fijar una generación antes
+de escribir nada.
+
+**Qué implica para el paso 3:** se parte en dos trabajos con riesgos distintos.
+Los 9/mes se pueden hacer ya, sin pedir permiso a nadie, con `/preapproval` —el
+mismo endpoint del sistema de abonos del lavadero—. El salto de 27 → 29 queda
+detrás de una autorización comercial que no depende de nosotros y que, si la
+niegan, degrada a «1-clic con CVV»: más friccion, pero el embudo no se cae.
+
+Lo que **no** está verificado, porque sólo lo puede contestar Mercado Pago sobre
+la cuenta concreta: si le dan esa autorización a un vendedor de infoproductos
+sin volumen previo. Es la única fuente que encontré del requisito —su propia
+página de Argentina— y no pude corroborarla en otra; tampoco encontré los
+criterios que aplican. Eso se pregunta, no se deduce.
 
 ---
 
@@ -160,8 +199,9 @@ hay que verificarlo en su documentación antes de comprometerse.
 2. **Mirar el panel de Whop** antes del paso 2. Whop procesa en muchos países y
    puede tener métodos locales apagados. Diez minutos, y puede ahorrar los
    pasos 2 y 3 enteros.
-3. **Verificar la tarjeta guardada de Mercado Pago.** Una tarde de leer su
-   documentación. Si la respuesta es no, el paso 3 cambia de forma.
+3. ~~Verificar la tarjeta guardada de Mercado Pago.~~ **Hecho.** Sí se puede,
+   con «Pagos automáticos», y pide autorización comercial. Lo siguiente es
+   preguntarles si dan esa autorización — es gratis y bloquea medio paso 3.
 4. **Medir.** El embudo español todavía no vendió nada. Construir una segunda
    pasarela para un problema cuyo tamaño no se conoce es trabajo que sale caro
    y después no mueve la aguja.
