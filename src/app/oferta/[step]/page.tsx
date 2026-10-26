@@ -49,7 +49,11 @@ export default async function Oferta({
   // Solo se necesita para dos cosas: el `livemode` que decide si un pedido de
   // prueba puede "cobrar", y la vuelta de una redireccion de pago, que es un
   // camino exclusivo de Stripe.
-  const whop = await conexionDe(order.store_id);
+  // La pasarela la dice el PEDIDO, no la tienda. Preguntarle a la tienda
+  // funcionaba con dos pasarelas y deja de funcionar con tres: un pedido de
+  // otra pasarela heredaria el `livemode` de Whop solo porque la tienda lo
+  // tiene conectado.
+  const whop = order.provider === "whop" ? await conexionDe(order.store_id) : null;
   const stripeCfg = whop ? null : await stripeForStore(order.store_id);
   const livemode = whop ? whop.livemode : stripeCfg!.livemode;
   // VER, no cobrar: un pedido de prueba tiene que poder recorrer estas

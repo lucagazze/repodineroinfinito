@@ -111,7 +111,7 @@ async function lookup(ref: string) {
   const valor = esWhop(ref) ? WHOP + ref : ref;
   const { data, error } = await db
     .from("orders")
-    .select("id,store_id,funnel_id,pp_funnel_id,status,locale,currency,email,name")
+    .select("id,store_id,funnel_id,pp_funnel_id,provider,status,locale,currency,email,name")
     .eq(col, valor)
     .maybeSingle();
   // Base caída ≠ «no existe»: con error, la página muestra «tu pago está

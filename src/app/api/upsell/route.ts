@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
   const col = ref.startsWith("pi_") ? "stripe_payment_intent" : "stripe_session_id";
   const { data: order } = await db
     .from("orders")
-    .select("id,store_id,funnel_id,pp_funnel_id,stripe_customer,currency,status,email,whop_member_id,whop_payment_method_id")
+    .select("id,store_id,funnel_id,pp_funnel_id,provider,stripe_customer,currency,status,email,whop_member_id,whop_payment_method_id")
     .eq(col, ref)
     .maybeSingle();
 
@@ -60,11 +60,27 @@ export async function POST(req: NextRequest) {
       : NextResponse.json({ reason: "declined" }, { status: 409 });
   }
 
-  // Whop va primero: `stripeForStore` tira si la tienda no tiene Stripe, y una
-  // tienda que cobra con Whop no lo tiene. Si se consultara igual, el post-pago
-  // devolvia 500 y el comprador veia un error con la tarjeta ya guardada.
-  const whop = await conexionDe(order.store_id);
-  if (whop) return cobrarConWhop(req, body, order, whop);
+  // CON QUE PASARELA SE COBRA: lo dice el PEDIDO, no la tienda.
+  //
+  // Antes esto se adivinaba -- «¿la tienda tiene Whop conectado? entonces
+  // Whop» -- y funcionaba por casualidad mientras solo hubiera dos pasarelas.
+  // Con una tercera conectada, un comprador que pago por Mercado Pago habria
+  // recibido un intento de cobro contra una tarjeta guardada en Whop que no
+  // existe, y habria fallado en silencio con el dinero de por medio.
+  //
+  // `orders.provider` ya se guarda desde fulfill.ts y esta poblado en todos los
+  // pedidos: solo habia que leerlo.
+  if (order.provider === "whop") {
+    const whop = await conexionDe(order.store_id);
+    if (!whop) {
+      // El pedido se cobro por Whop y la tienda ya no lo tiene conectado. Caer
+      // a Stripe aqui seria cobrarle a otra tarjeta: mejor parar y que quede
+      // en los registros.
+      console.error("[upsell] pedido de Whop sin conexion de Whop:", order.id);
+      return NextResponse.json({ error: "Pasarela no disponible" }, { status: 503 });
+    }
+    return cobrarConWhop(req, body, order, whop);
+  }
 
   const { stripe, livemode } = await stripeForStore(order.store_id);
   if (!orderChargeable(order.status, livemode)) {

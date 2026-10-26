@@ -14,8 +14,8 @@ for (const line of readFileSync(PROJ + ".env.local", "utf8").split("\n")) {
   }
 }
 
-const [id, out] = process.argv.slice(2);
-if (!id || !out) throw new Error("uso: <campaignId> <outFile>");
+const [id, out, localeArg] = process.argv.slice(2);
+if (!id || !out) throw new Error("uso: <campaignId> <outFile> [locale]");
 
 const { renderCampaign, newCtx } = await import("../src/lib/mkt/render.ts");
 
@@ -32,8 +32,9 @@ if (!c) throw new Error("campaña no encontrada");
 const [store] = await q(`stores?select=*&id=eq.${c.store_id}`);
 if (!store) throw new Error("tienda no encontrada");
 
-const locale = (c.segment?.locales?.[0] ?? c.fallback_locale ?? "en") as "en";
+const locale = (localeArg ?? c.segment?.locales?.[0] ?? c.fallback_locale ?? "en") as "en";
 const version = c.versions[locale];
+if (!version) throw new Error(`la campaña no tiene versión "${locale}" (hay: ${Object.keys(c.versions).join(", ")})`);
 
 const r = await renderCampaign({
   campaignId: c.id,

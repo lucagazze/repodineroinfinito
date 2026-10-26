@@ -55,22 +55,30 @@ hoy ya es frágil.
 
 ---
 
-## Paso 1 · Que el pedido recuerde su pasarela
+## Paso 1 · Que el pedido recuerde su pasarela — HECHO el 26/10/2026
 
-Independiente de todo lo demás. Se puede hacer esta semana.
+**Correccion del plan original.** Este paso decia «hay que crear
+`orders.gateway` y rellenarlo». Era falso: **la columna ya existia**. Se llama
+`orders.provider`, la escribe `fulfill.ts` desde hace tiempo, es NOT NULL con
+defecto `'stripe'`, y esta correctamente poblada — 7 pedidos de Whop y 2 de
+Stripe al verificarlo.
 
-1. Columna `orders.gateway text` con los valores actuales rellenados a partir de
-   qué columnas tiene cada pedido (`whop_member_id` → whop, `stripe_customer`
-   → stripe).
-2. El checkout la escribe al crear el pedido.
-3. `api/upsell/route.ts` la lee en vez de adivinar.
-4. Verificación: un pedido de cada pasarela, y comprobar que el post-pago elige
-   la correcta.
+El fallo era solo el que se describe arriba: dos sitios que **no la leian**.
 
-**Qué desbloquea:** nada nuevo, pero quita el fallo silencioso y es
-precondición de todo el resto.
+**Lo que se cambio:**
 
----
+| archivo | antes | ahora |
+|---|---|---|
+| `api/upsell/route.ts` | `conexionDe(store)` y si hay, Whop | `if (order.provider === "whop")` |
+| `app/oferta/[step]/page.tsx` | lo mismo, para el `livemode` | idem |
+| `lib/order-lookup.ts` | no traia `provider` | lo trae |
+
+Y un caso que antes no existia: un pedido cobrado por Whop cuya tienda ya no
+tiene Whop conectado. Antes caia a Stripe —es decir, intentaba cobrarle a otra
+tarjeta—; ahora devuelve 503 y deja el pedido en los registros.
+
+**Verificado:** `tsc --noEmit` limpio. Falta la prueba de verdad, que es un
+pedido real de cada pasarela recorriendo el post-pago.
 
 ## Paso 2 · Elegir la pasarela por país
 
