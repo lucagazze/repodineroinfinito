@@ -29,6 +29,19 @@
 --   provider           quien cobra. Sin esto, dos pasarelas con el mismo id
 --                      numerico se pisarian en los indices unicos.
 
+-- ------------------------------------------------------- 0 · la vista, afuera
+
+-- SE DROPEA ANTES DE RENOMBRAR, y no alcanza con recrearla despues.
+--   `create or replace view` NO puede cambiarle el nombre a una columna:
+--   «cannot change name of view column whop_membership_id to external_id»
+--   (42P16, medido contra la base el 26/10/2026 -- la migracion entera
+--   rollbackeo, asi que no quedo a medias).
+--   La vista se creo con `select s.*`, que resuelve la lista de columnas en el
+--   momento de crearse: renombrar la columna de la tabla NO renombra la de la
+--   vista, y la vista se queda exponiendo el nombre viejo.
+--   Nada depende de ella: comprobado en pg_depend antes de dropear.
+drop view if exists public.subscriptions_activas;
+
 -- ------------------------------------------------------- 1 · las suscripciones
 
 alter table public.subscriptions
@@ -103,10 +116,9 @@ comment on table public.subscription_events is
 
 -- --------------------------------------------------------- 3 · la vista
 
--- `select s.*` ya arrastra las columnas nuevas, pero la vista guarda la lista
--- de columnas resuelta al crearse: sin recrearla sigue devolviendo los nombres
--- viejos y la app no encuentra provider.
-create or replace view public.subscriptions_activas as
+-- Recreada ya con los nombres nuevos. Ver la seccion 0 por que hubo que
+-- dropearla en vez de reemplazarla.
+create view public.subscriptions_activas as
   select s.*
     from public.subscriptions s
    where s.status in ('active','past_due')
@@ -374,3 +386,21 @@ end;
 $$;
 comment on function public.sub_vencer is
   'Barrido diario: vence las bajas cumplidas y corta a los morosos pasada la gracia. Cada evento queda con la pasarela de su suscripcion.';
+
+-- ------------------------------------------- 8 · la vista respeta el RLS
+
+-- APARECIO AL RECREAR LA VISTA, y no lo introdujo esta migracion: la vista
+-- original tampoco lo tenia.
+--   Una vista sin `security_invoker` corre con los permisos de su DUENO
+--   (postgres) y se saltea el row level security de la tabla de abajo.
+--   Medido con un suscriptor de prueba adentro: como `anon`,
+--   `subscriptions` devolvia 0 filas -- el RLS andaba -- y
+--   `subscriptions_activas` devolvia 1, con mail, nombre, pais e importe.
+--
+-- Hoy no es explotable por nada que la app publique: la clave anon no esta en
+-- su entorno ni en su codigo de cliente. Pero es una clave publicable por
+-- diseno, asi que la fuga empieza el dia que alguna pagina la use.
+--
+-- La app no se ve afectada: entra con la service_role, que tiene BYPASSRLS.
+-- Comprobado despues de aplicarlo: anon 0 filas, service_role 1.
+alter view public.subscriptions_activas set (security_invoker = on);

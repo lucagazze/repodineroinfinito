@@ -211,7 +211,7 @@ parte del sistema donde un error cuesta dinero de verdad.
 
 ---
 
-## Paso 3a · Los 9/mes — ESCRITO Y VERIFICADO el 26/10/2026, SIN APLICAR
+## Paso 3a · Los 9/mes — APLICADO Y VERIFICADO el 26/10/2026
 
 ### Lo que se encontro al empezar
 
@@ -260,18 +260,40 @@ frecuencia adentro: preapproval sin plan asociado).
 
 Verificado: `tsc --noEmit` limpio y `next build` completo.
 
-### POR QUE NO ESTA APLICADO, Y QUE FALTA
+### Aplicado, y lo que la aplicacion enseno
 
-La migracion renombra columnas en la base de produccion y quedo **bloqueada por
-permisos**. Hasta que se aplique:
+Dos cosas que solo aparecieron al correrla contra la base de verdad:
 
-> **NO HACER PUSH DE ESTA RAMA.** El codigo ya lee `external_id` y la base
-> todavia tiene `whop_membership_id`. Desplegar primero rompe el panel de
-> suscripciones y la ruta de baja.
+**1 · `create or replace view` no puede renombrar una columna.**
+`cannot change name of view column whop_membership_id to external_id` (42P16).
+La vista se creo con `select s.*`, que resuelve la lista de columnas al
+crearse: renombrar la columna de la TABLA no renombra la de la VISTA. Hubo que
+dropear la vista antes de los renombres y recrearla despues. La migracion
+entera rollbackeo, asi que no quedo a medias — comprobado antes de reintentar.
 
-El orden correcto es: aplicar la migracion, comprobar el esquema, y recien
-entonces hacer push. Entre las dos cosas hay una ventana en la que el panel de
-suscripciones da error — con cero suscriptores, no afecta a nadie que pague.
+**2 · La vista se salteaba el RLS, y eso no lo introdujo esta migracion.**
+Una vista sin `security_invoker` corre con los permisos de su dueno. Medido con
+un suscriptor de prueba adentro: como `anon`, `subscriptions` devolvia 0 filas
+y `subscriptions_activas` devolvia **1**, con mail, nombre, pais e importe.
+Hoy no es explotable por nada que la app publique —la clave anon no esta en su
+entorno ni en su codigo de cliente— pero es una clave publicable por diseno.
+Arreglado con `security_invoker = on` y verificado en los dos sentidos: anon 0
+filas, service_role 1.
+
+### La prueba del cobro, contra la base
+
+No alcanza con que compile. Se corrio un cobro de prueba y se borro despues
+(0 suscripciones y 0 eventos al terminar):
+
+| | resultado |
+|---|---|
+| alta por Whop | crea la suscripcion |
+| **el mismo pago otra vez** | **rebota**, `payments_count` no se mueve |
+| el mismo id de pago por Mercado Pago | cuenta aparte — es otro pago |
+| cambio de pasarela | queda anotado en la bitacora y devuelve la bandera |
+
+La tercera fila es la que justifica la migracion: con el indice viejo, un pago
+de Mercado Pago no habria tenido NINGUNA proteccion de idempotencia.
 
 ### Lo que viene despues, con las formas ya verificadas
 
