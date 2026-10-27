@@ -88,6 +88,8 @@ export type Store = {
   stripe_pmc?: string | null;
   /** Pasarela con la que cobra: stripe | whop. El checkout monta una sola. */
   gateway?: Pasarela;
+  /** País ISO-2 → pasarela, para los compradores de ese país. Lo demás usa `gateway`. */
+  gateway_by_country?: Record<string, string> | null;
   timezone?: string;
   email_from?: string | null;
   legal_name?: string | null;
@@ -101,9 +103,9 @@ export type Store = {
 export const STORE_COLS =
   "id,slug,name,domain,support_email,default_locale,guarantee_days,meta_pixel_id,brand," +
   "display_name,logo_url,timezone,email_from,legal_name,legal_address,statement_descriptor,thankyou,delivery_email,stripe_pmc," +
-  // Sin esta columna acá el checkout leería gateway como undefined y cobraría
+  // Sin estas columnas acá el checkout leería gateway como undefined y cobraría
   // siempre con Stripe, sin un solo error: la lista de columnas es explícita.
-  "gateway";
+  "gateway,gateway_by_country";
 
 /** Nombre legal y descriptor: los de la tienda, o los del entorno como respaldo. */
 export function legalOf(s: Store) {

@@ -61,16 +61,26 @@ export function pasarelaDePedido(order: { provider?: string | null } | null | un
  * el día que se agregue Mercado Pago no hay que ir a buscarlo a quince
  * lugares.
  *
- * La REGLA de enrutado -- qué países van a qué pasarela -- sigue sin
- * guardarse, y sigue siendo deliberado: `resolveSettings` solo valida
- * booleanos, numeros y cadenas, asi que una lista de reglas metida ahi se
- * descartaria en silencio. Ahora que Mercado Pago existe como modulo, lo que
- * falta para decidirlo es una tienda cobrando por el de verdad: recien
- * entonces se sabe si la regla es por pais, por moneda o por producto.
+ * LA REGLA VIVE EN `stores.gateway_by_country`, y no en los settings del
+ * embudo: `resolveSettings` solo valida booleanos, numeros y cadenas, asi que
+ * una lista de reglas metida ahi se descartaria EN SILENCIO -- el enrutado no
+ * funcionaria y no habria ni un error que lo delatara. Por eso se espero a
+ * tener una segunda pasarela viva antes de elegir donde guardarla.
+ *
+ * PARA QUE SIRVE DE VERDAD
+ *   No es una preferencia estetica: es que a Bruno no todas las pasarelas le
+ *   pagan. A un comprador argentino hay que cobrarle por Mercado Pago, que
+ *   deposita en una cuenta argentina; al resto, por la que cobre en dolares.
+ *   Sin esto hay que elegir una sola y perder el otro mercado.
  */
 export function pasarelaParaComprador(
-  store: Pick<Store, "gateway"> | null | undefined,
-  _pais?: string | null,
+  store: Pick<Store, "gateway" | "gateway_by_country"> | null | undefined,
+  pais?: string | null,
 ): Pasarela {
+  const cc = pais?.trim().toUpperCase();
+  const regla = cc ? store?.gateway_by_country?.[cc] : null;
+  // Una regla que nombra una pasarela que no existe se ignora, no rompe: el
+  // comprador cae en la de la tienda y la venta sigue viva.
+  if (esPasarela(regla)) return regla;
   return pasarelaDeTienda(store);
 }
