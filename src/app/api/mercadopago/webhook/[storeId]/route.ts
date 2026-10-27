@@ -41,6 +41,23 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ sto
   const v = verificarFirma(req.url, req.headers, conn.webhookSecret);
   if (!v.ok) {
     console.error("[mercadopago]", storeId, "firma rechazada:", v.motivo);
+    // SE ANOTA EN LA BASE, no solo en la consola.
+    //   El 27/10/2026 una notificacion de prueba no aparecio por ningun lado y
+    //   no se pudo distinguir «no llego» de «llego y la rechace»: el unico
+    //   rastro era un console.error, y los registros del plan Hobby duran
+    //   minutos. Un webhook rechazado es justo el que hay que poder mirar.
+    //   `.catch` a proposito: si la bitacora falla, igual se contesta 400.
+    await db.from("subscription_events").insert({
+      store_id: tienda.id, kind: "desconocido", provider: "mercadopago",
+      detail: `firma rechazada: ${v.motivo}`,
+      raw: {
+        url: req.url,
+        cabeceras: {
+          "x-signature": req.headers.get("x-signature"),
+          "x-request-id": req.headers.get("x-request-id"),
+        },
+      } as never,
+    }).then(() => {}, () => {});
     return NextResponse.json({ error: "Firma inválida" }, { status: 400 });
   }
   // Cual de las variantes de manifiesto coincidio. Su documentacion no escribe
