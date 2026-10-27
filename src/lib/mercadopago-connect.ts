@@ -48,6 +48,17 @@ export async function connectMercadoPago(
   webhookSecret: string | null,
   activar = false,
 ) {
+  // EL PREFIJO PEGADO DOS VECES.
+  //   Paso el 27/10/2026: el token llego como «APP_USR-APP_USR-3386...», 82
+  //   caracteres en vez de 74 y seis bloques en vez de cinco. Mercado Pago
+  //   contestaba `invalid_token` y un 403 de PolicyAgent, que no se parecen en
+  //   nada a «lo pegaste dos veces». Se arregla aqui en vez de hacer que
+  //   alguien lo descubra leyendo bloques separados por guiones.
+  accessToken = accessToken.trim();
+  while (/^(APP_USR-|TEST-)\1/.test(accessToken)) {
+    accessToken = accessToken.replace(/^(APP_USR-|TEST-)/, "");
+  }
+
   // La llave tiene que servir ANTES de guardarla: una llave invalida guardada
   // se descubre con la primera venta, que es el peor momento posible.
   let cuenta: { id?: number; nickname?: string; site_id?: string };
