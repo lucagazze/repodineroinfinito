@@ -4,7 +4,7 @@ import { db, getProductById, STORE_COLS, type Product, type Store } from "@/lib/
 import { encrypt, decrypt, sha256 } from "@/lib/secrets";
 import { stripeForStore } from "@/lib/stripe";
 import { connectWhop, disconnectWhop } from "@/lib/whop-connect";
-import { connectMercadoPago, disconnectMercadoPago } from "@/lib/mercadopago-connect";
+import { activateMercadoPago, connectMercadoPago, disconnectMercadoPago } from "@/lib/mercadopago-connect";
 import { connectStripe, disconnectStripe, registerDomains } from "@/lib/stripe-connect";
 import { sendDelivery } from "@/lib/email";
 import { uploadImage } from "@/lib/media";
@@ -365,17 +365,38 @@ export function registerWriteTools(server: McpServer) {
     description:
       "Connect a store to its Mercado Pago account and switch the store to charge with Mercado Pago (Checkout Pro: card, instalments, wallet, Rapipago/Pago Fácil). " +
       "Needs the account's Access Token from «Tus integraciones». webhook_secret is what makes delivery work: without it every paid webhook is rejected and NOTHING is delivered — Mercado Pago shows it once, when the webhook is created. " +
-      "A TEST- token is detected and stored as non-live. The token is validated against /users/me before anything is stored, and encrypted at rest. Sets stores.gateway to 'mercadopago'. " +
+      "A TEST- token is detected and stored as non-live. The token is validated against /users/me before anything is stored, and encrypted at rest. " +
+      "CONNECTING DOES NOT SWITCH THE GATEWAY: the store keeps charging with whatever it used, so you can register the webhook and prove signatures validate while the old gateway still takes the money. Pass activate:true, or use activate_mercadopago later, to actually switch. " +
       "The webhook URL to register in Mercado Pago is https://{store domain}/api/mercadopago/webhook/{store slug}.",
     input: z.object({
       store: storeArg,
       access_token: z.string().min(20, "The account Access Token (APP_USR-… or TEST-…)"),
       webhook_secret: z.string().min(8, "The webhook signing secret").optional(),
+      activate: z.boolean().optional().describe("Switch the store to charge with Mercado Pago now. Default false."),
     }),
-    handler: async ({ store, access_token, webhook_secret }) => {
+    handler: async ({ store, access_token, webhook_secret, activate }) => {
       const s = await getStore(store);
       try {
-        return await connectMercadoPago(s.id, access_token, webhook_secret ?? null);
+        return await connectMercadoPago(s.id, access_token, webhook_secret ?? null, activate === true);
+      } catch (e) {
+        throw new UserError((e as Error).message);
+      }
+    },
+  });
+
+  defineTool(server, "activate_mercadopago", {
+    title: "Switch the store to charge with Mercado Pago",
+    kind: "write",
+    external: true,
+    description:
+      "Make Mercado Pago the gateway that actually charges. Separate from connecting on purpose, so credentials can be stored and the webhook proven while the previous gateway keeps selling. " +
+      "Refuses if there is no connection or no webhook signing secret, because without the secret every payment would be rejected by signature and nothing would be delivered. " +
+      "Reversible: connect the previous gateway again, or disconnect_mercadopago.",
+    input: z.object({ store: storeArg }),
+    handler: async ({ store }) => {
+      const s = await getStore(store);
+      try {
+        return await activateMercadoPago(s.id);
       } catch (e) {
         throw new UserError((e as Error).message);
       }
