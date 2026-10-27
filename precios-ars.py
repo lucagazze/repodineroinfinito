@@ -27,13 +27,20 @@ RAIZ = pathlib.Path(__file__).parent
 TIENDA = "financestudylab"
 PAISES = ["AR"]
 
-# Los nueve del embudo kit-es. El precio en USD es el que manda y el de ARS se
-# deriva: si manana cambia uno en dolares, este script lo arrastra solo.
+# El precio en USD es el que manda y el de ARS se deriva: si manana cambia uno
+# en dolares, este script lo arrastra solo.
+#
+# Los cuatro primeros son los que se venden hoy (principal, dos bumps y el
+# unico paso de post-pago). Los demas se retiraron de la oferta el 27/10/2026
+# --los dos cuadernillos por flojos, los tres downsells por presionar con
+# descuento bajo la marca propia-- y se les mantiene el precio para que volver
+# a ofrecerlos sea una linea y no una recarga.
 PRODUCTOS = [
-    "siete-letras", "donde-sale-cada-cifra", "cuaderno-del-domingo",
-    "la-hoja-de-valuacion", "la-hoja-de-valuacion-lite",
-    "leer-y-ciclo", "leer-una-empresa",
-    "vision-semanal", "vision-semanal-prueba",
+    # en venta
+    "siete-letras", "la-hoja-de-valuacion", "leer-y-ciclo", "vision-semanal",
+    # retirados
+    "donde-sale-cada-cifra", "cuaderno-del-domingo",
+    "la-hoja-de-valuacion-lite", "leer-una-empresa", "vision-semanal-prueba",
 ]
 
 
@@ -121,18 +128,25 @@ def main():
     tasa = mep()
     print(f"\n  Usando {tasa:,.0f} ARS por dólar (MEP).\n".replace(",", "."))
 
-    tienda = sb("GET", f"stores?select=id,gateway&slug=eq.{TIENDA}")[0]
+    tienda = sb("GET", f"stores?select=id,gateway,gateway_by_country&slug=eq.{TIENDA}")[0]
     sid = tienda["id"]
 
-    # EL MERCADO SOLO SE ENCIENDE SI COBRA MERCADO PAGO.
-    #   Los seis pasos del post-pago cobran contra planes de Whop fijados en
-    #   DOLARES. Si el mercado ARS estuviera activo con la tienda en Whop, un
-    #   argentino veria «ARS 42.900» en la pagina y Whop le cobraria USD 27.
-    #   Medido el 27/10/2026: oferta/[step]/page.tsx toma la moneda de
-    #   `order.currency`, asi que los precios en pesos SI llegarian a esa
-    #   pantalla. Los precios se cargan igual --quedan listos-- pero el pais
-    #   no se enchufa hasta que la pasarela sea mercadopago.
-    encender = tienda.get("gateway") == "mercadopago"
+    # EL MERCADO SOLO SE ENCIENDE SI AL ARGENTINO LE COBRA MERCADO PAGO.
+    #   Lo que hay que preguntar no es con que cobra la tienda, sino con que
+    #   cobra A UN ARGENTINO, y desde el 27/10/2026 esas dos cosas se
+    #   separaron: la tienda quedo en `whop` para el resto del mundo y
+    #   Argentina se enruta por `gateway_by_country` (lib/pasarela.ts).
+    #
+    #   Mirar solo `gateway` --como hacia esta linea hasta que se agrego el
+    #   enrutado-- daba False y el script APAGABA el mercado en pesos, es
+    #   decir deshacia en silencio justo lo que acababa de configurarse. Se
+    #   consulta lo mismo que consulta la app, y por el mismo pais.
+    por_pais = tienda.get("gateway_by_country") or {}
+    encender = "mercadopago" in (tienda.get("gateway"), por_pais.get(PAISES[0]))
+
+    # Y el post-pago ya no cobra en dolares contra planes de Whop para el
+    # argentino: el unico paso que queda es Vision Semanal, que tiene su
+    # precio en ARS cargado aqui mismo.
 
     # El mercado: sin esto el checkout no sabe que a un argentino hay que
     # cobrarle en pesos, y le seguiria mostrando dolares.
