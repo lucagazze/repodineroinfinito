@@ -376,3 +376,60 @@ encontro el unico sitio donde «dos pasarelas» estaba grabado en un tipo.
      pagina de baja
 3. **Credenciales**: access token y secreto de firma del webhook, creado en
    «Tus integraciones». Sin el secreto nada se acredita.
+
+---
+
+## Paso 3c · Mercado Pago cobra — TERMINADO el 26/10/2026
+
+Lo pidió Bruno al descubrir que **no puede retirar el dinero de Whop**, y que
+**Stripe no acepta vendedores de Argentina** (verificado en stripe.com/global:
+en LatAm sólo Brasil y México). Mercado Pago es la única que le paga acá.
+
+### Checkout Pro, no campos de tarjeta
+
+El motor manda al comprador a pagar a Mercado Pago y lo trae de vuelta. Se
+pierde la página única; se gana lo que en Argentina decide la venta:
+
+```
+cuotas · billetera de Mercado Pago · Rapipago / Pago Fácil
+```
+
+Nada de eso existe con un formulario de tarjeta propio. Y no se toca nunca un
+número de tarjeta, igual que con Whop.
+
+### Las piezas
+
+| archivo | qué hace |
+|---|---|
+| `api/mercadopago/pay` | arma la preferencia. **El precio lo calcula el servidor**, mismas defensas que `/api/pi` y `/api/whop/pay`: límite por IP, control de moneda, y se honra el total que vio |
+| `motor-mercadopago.tsx` | el motor. `listo: true`, sin elemento de tarjeta, y `pagar` redirige al `init_point` |
+| `mercadopago-events.ts` | el webhook `payment` → **`fulfill`**, la misma función que usa Whop. No hay una entrega por pasarela |
+| `connect_mercadopago` | alta de credenciales por MCP, con el token validado contra `/users/me` antes de guardarlo |
+
+### Tres decisiones que no son obvias
+
+**`auto_return: "approved"`, no siempre.** Un pago en efectivo queda `pending`:
+el comprador NO debe ver la página de gracias, porque todavía no pagó. Cuando
+paga en el local llega otro aviso y ahí sí se entrega.
+
+**La metadata usa las MISMAS claves que Whop** (`store`, `funnel`, `locale`).
+Si usara otras, `fulfill` tendría que saber quién cobró — y la entrega no sabe
+de pasarelas, que es justamente lo que la mantiene de una sola pieza.
+
+**El motor devuelve `true` al redirigir.** Si soltara el botón, en el segundo
+que tarda la navegación se podría tocar otra vez y crear dos preferencias.
+
+### LO QUE FALTA PARA COBRAR DE VERDAD
+
+1. **Las credenciales:** Access Token de «Tus integraciones» + el secreto del
+   webhook. Sin el secreto, **todo cobro se rechaza por firma y no se entrega
+   nada**.
+2. **Registrar el webhook** en Mercado Pago apuntando a
+   `https://pay.financestudylab.com/api/mercadopago/webhook/financestudylab`,
+   con los temas `payment`, `subscription_preapproval` y
+   `subscription_authorized_payment`.
+3. **Los precios en ARS.** Hoy el embudo sólo tiene USD. Una cuenta argentina
+   cobra en pesos: hay que cargar el mercado y los precios ANTES de vender.
+4. **Una compra de prueba**, que además cierra las tres preguntas abiertas: qué
+   variante de firma usa, qué valores de `status` manda, y si `cancelled` corta
+   en el acto o a fin de período.

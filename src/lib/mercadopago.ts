@@ -249,3 +249,81 @@ export function montoDe(p: PagoAutorizado): number | null {
 export const verCuenta = (token: string) =>
   llamar<{ id?: number; nickname?: string; email?: string; site_id?: string }>(
     token, "GET", "/users/me");
+
+// ---------------------------------------------------- el checkout de una vez
+
+/**
+ * Una preferencia: el carrito que Mercado Pago le va a cobrar al comprador.
+ *
+ * POR QUE CHECKOUT PRO Y NO CAMPOS DE TARJETA EN NUESTRA PAGINA
+ *   Checkout Pro manda al comprador a pagar a Mercado Pago y lo trae de vuelta.
+ *   Se pierde la pagina unica, y se gana lo que en Argentina decide la venta:
+ *   CUOTAS, la billetera de Mercado Pago, y Rapipago / Pago Facil para quien no
+ *   tiene tarjeta. Nada de eso existe si montamos un formulario de tarjeta.
+ *   Ademas no pasamos cerca de un numero de tarjeta, igual que con Whop.
+ */
+export type Preferencia = {
+  id: string;
+  init_point?: string | null;
+  sandbox_init_point?: string | null;
+  external_reference?: string | null;
+};
+
+export type ItemPreferencia = {
+  id: string; title: string; quantity: number;
+  unit_price: number; currency_id: string;
+  description?: string; picture_url?: string;
+};
+
+export async function crearPreferencia(token: string, p: {
+  items: ItemPreferencia[];
+  email?: string | null;
+  nombre?: string | null;
+  /** A donde vuelve el comprador. `success` recibe ademas los datos del pago. */
+  volverA: { success: string; failure: string; pending: string };
+  /** Nuestro webhook. Sin esto el cobro entra y no se entrega nada. */
+  avisarA: string;
+  referencia: string;
+  descriptor?: string;
+  metadata?: Record<string, string>;
+  idempotencia?: string;
+}): Promise<Preferencia> {
+  return llamar<Preferencia>(token, "POST", "/checkout/preferences", {
+    items: p.items,
+    ...(p.email || p.nombre
+      ? { payer: { ...(p.email ? { email: p.email } : {}), ...(p.nombre ? { name: p.nombre } : {}) } }
+      : {}),
+    back_urls: p.volverA,
+    // Sólo vuelve solo si el pago quedó aprobado. Con un pago en efectivo
+    // (Rapipago) el estado queda `pending` y el comprador NO debe ver la
+    // pagina de gracias: todavia no pago.
+    auto_return: "approved",
+    notification_url: p.avisarA,
+    external_reference: p.referencia,
+    ...(p.descriptor ? { statement_descriptor: p.descriptor.slice(0, 22) } : {}),
+    ...(p.metadata ? { metadata: p.metadata } : {}),
+  }, p.idempotencia);
+}
+
+/** Un pago de Checkout Pro. Lo que llega por webhook es un aviso; esto es el hecho. */
+export type Pago = {
+  id: number | string;
+  status?: string | null;
+  status_detail?: string | null;
+  transaction_amount?: number | null;
+  currency_id?: string | null;
+  external_reference?: string | null;
+  description?: string | null;
+  metadata?: Record<string, string> | null;
+  payer?: { email?: string | null; first_name?: string | null; last_name?: string | null;
+            identification?: { type?: string; number?: string } | null } | null;
+  additional_info?: { payer?: { first_name?: string | null } | null } | null;
+};
+
+export const leerPago = (token: string, id: string) =>
+  llamar<Pago>(token, "GET", `/v1/payments/${encodeURIComponent(id)}`);
+
+/** ¿Este pago entró? Mercado Pago usa los mismos estados que en las suscripciones. */
+export function pagoAcreditado(p: Pago): boolean {
+  return (p.status ?? "").toLowerCase() === "approved";
+}

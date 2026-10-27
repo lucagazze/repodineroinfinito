@@ -96,6 +96,8 @@ type Dict = {
   // un comprador britanico con un link vencido leia «Pedido no encontrado ·
   // Revisá el link del mail» -- en español y ademas en voseo, que no es el
   // registro de ninguna de las dos.
+  /** Checkout Pro se paga EN Mercado Pago: hay que avisarlo antes del botón. */
+  mpAviso: string;
   dlBadLink: string;
   dlNotFound: string;
   dlCheckLink: string;
@@ -194,6 +196,7 @@ export const T: Record<Locale, Dict> = {
     continueToDownloads: "Vai ai tuoi download",
     upsellFailed: "Non siamo riusciti ad addebitare la carta. Il tuo ordine è comunque confermato.",
     mailSubject: (s) => `Il tuo download da ${s} è pronto`,
+    mpAviso: "Pagherai su Mercado Pago, con carta, rate o in contanti. Poi torni qui.",
     dlBadLink: "Link non valido",
     dlNotFound: "Ordine non trovato",
     dlCheckLink: "Controlla il link della mail.",
@@ -286,6 +289,7 @@ export const T: Record<Locale, Dict> = {
     continueToDownloads: "Go to your downloads",
     upsellFailed: "We could not charge your card. Your order is still confirmed.",
     mailSubject: (s) => `Your download from ${s} is ready`,
+    mpAviso: "You’ll pay on Mercado Pago — card, instalments or cash. Then you come back here.",
     dlBadLink: "Invalid link",
     dlNotFound: "Order not found",
     dlCheckLink: "Check the link in your email.",
@@ -378,6 +382,7 @@ export const T: Record<Locale, Dict> = {
     continueToDownloads: "Ir a mis descargas",
     upsellFailed: "No pudimos cobrar la tarjeta. Tu pedido igual está confirmado.",
     mailSubject: (s) => `Tu descarga de ${s} ya está lista`,
+    mpAviso: "Vas a pagar en Mercado Pago: tarjeta, cuotas o efectivo. Después volvés acá.",
     dlBadLink: "Enlace no válido",
     dlNotFound: "Pedido no encontrado",
     dlCheckLink: "Revisa el enlace del correo.",
@@ -470,6 +475,7 @@ export const T: Record<Locale, Dict> = {
     continueToDownloads: "Ir para meus downloads",
     upsellFailed: "Não conseguimos cobrar o cartão. Seu pedido continua confirmado.",
     mailSubject: (s) => `Seu download da ${s} está pronto`,
+    mpAviso: "Você vai pagar no Mercado Pago: cartão, parcelas ou dinheiro. Depois volta pra cá.",
     dlBadLink: "Link inválido",
     dlNotFound: "Pedido não encontrado",
     dlCheckLink: "Confere o link do e-mail.",
@@ -559,6 +565,7 @@ export const T: Record<Locale, Dict> = {
     continueToDownloads: "Aller à mes téléchargements",
     upsellFailed: "Nous n'avons pas pu débiter ta carte. Ta commande reste confirmée.",
     mailSubject: (s) => `Ton téléchargement ${s} est prêt`,
+    mpAviso: "Tu paieras sur Mercado Pago : carte, paiement en plusieurs fois ou espèces. Puis tu reviens ici.",
     dlBadLink: "Lien invalide",
     dlNotFound: "Commande introuvable",
     dlCheckLink: "Vérifie le lien de l’e-mail.",
@@ -648,6 +655,7 @@ export const T: Record<Locale, Dict> = {
     continueToDownloads: "Zu meinen Downloads",
     upsellFailed: "Wir konnten deine Karte nicht belasten. Deine Bestellung ist trotzdem bestätigt.",
     mailSubject: (s) => `Dein Download von ${s} ist bereit`,
+    mpAviso: "Du bezahlst bei Mercado Pago – Karte, Raten oder bar. Danach kommst du hierher zurück.",
     dlBadLink: "Ungültiger Link",
     dlNotFound: "Bestellung nicht gefunden",
     dlCheckLink: "Prüfe den Link in der E-Mail.",

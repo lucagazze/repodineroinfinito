@@ -1,5 +1,6 @@
 "use client";
 import type { Pasarela } from "@/lib/pasarela";
+import { useMotorMercadoPago } from "./motor-mercadopago";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Inter, DM_Sans } from "next/font/google";
@@ -234,11 +235,13 @@ export default function CheckoutClient(p: Props) {
             <p className="ck-err">{t.ckPayNotDone}</p>
           )
         ) : p.gateway === "mercadopago" ? (
-          // La tienda cobra con Mercado Pago pero el formulario del comprador
-          // todavia no existe (falta el motor y /api/mercadopago/pay). Se dice
-          // que no se puede cobrar, igual que con Whop sin cuenta: caerse a
-          // Stripe en silencio cobraria por una pasarela que nadie eligio.
-          <p className="ck-err">{t.ckPayNotDone}</p>
+          // Mercado Pago no monta campos de tarjeta: el formulario es el mismo
+          // de siempre y el motor, al tocar «pagar», manda a Checkout Pro.
+          <CheckoutForm
+            p={p} t={t} st={st} total={total} bumps={bumps} setBumps={setBumps}
+            createIntent={createIntent} getCheckout={() => checkoutRef.current} exitOn={exitOn}
+            recoveryToken={rec?.token ?? null} useMotor={useMotorMercadoPago}
+          />
         ) : stripePromise ? (
           <Elements
             stripe={stripePromise}

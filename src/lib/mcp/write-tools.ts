@@ -4,6 +4,7 @@ import { db, getProductById, STORE_COLS, type Product, type Store } from "@/lib/
 import { encrypt, decrypt, sha256 } from "@/lib/secrets";
 import { stripeForStore } from "@/lib/stripe";
 import { connectWhop, disconnectWhop } from "@/lib/whop-connect";
+import { connectMercadoPago, disconnectMercadoPago } from "@/lib/mercadopago-connect";
 import { connectStripe, disconnectStripe, registerDomains } from "@/lib/stripe-connect";
 import { sendDelivery } from "@/lib/email";
 import { uploadImage } from "@/lib/media";
@@ -351,6 +352,48 @@ export function registerWriteTools(server: McpServer) {
       const s = await getStore(store);
       try {
         return await connectWhop(s.id, api_key, company_id, webhook_secret ?? null, webhook_id ?? null);
+      } catch (e) {
+        throw new UserError((e as Error).message);
+      }
+    },
+  });
+
+  defineTool(server, "connect_mercadopago", {
+    title: "Connect Mercado Pago account",
+    kind: "write",
+    external: true,
+    description:
+      "Connect a store to its Mercado Pago account and switch the store to charge with Mercado Pago (Checkout Pro: card, instalments, wallet, Rapipago/Pago Fácil). " +
+      "Needs the account's Access Token from «Tus integraciones». webhook_secret is what makes delivery work: without it every paid webhook is rejected and NOTHING is delivered — Mercado Pago shows it once, when the webhook is created. " +
+      "A TEST- token is detected and stored as non-live. The token is validated against /users/me before anything is stored, and encrypted at rest. Sets stores.gateway to 'mercadopago'. " +
+      "The webhook URL to register in Mercado Pago is https://{store domain}/api/mercadopago/webhook/{store slug}.",
+    input: z.object({
+      store: storeArg,
+      access_token: z.string().min(20, "The account Access Token (APP_USR-… or TEST-…)"),
+      webhook_secret: z.string().min(8, "The webhook signing secret").optional(),
+    }),
+    handler: async ({ store, access_token, webhook_secret }) => {
+      const s = await getStore(store);
+      try {
+        return await connectMercadoPago(s.id, access_token, webhook_secret ?? null);
+      } catch (e) {
+        throw new UserError((e as Error).message);
+      }
+    },
+  });
+
+  defineTool(server, "disconnect_mercadopago", {
+    title: "Disconnect Mercado Pago account",
+    kind: "destructive",
+    external: true,
+    description:
+      "DESTRUCTIVE. Remove a store's Mercado Pago connection and switch the store back to Stripe. The checkout cannot charge with Mercado Pago afterwards. " +
+      "Does NOT delete the webhook inside Mercado Pago: do that there, or it keeps posting to an endpoint that no longer has its secret.",
+    input: z.object({ store: storeArg, confirm: confirmArg }),
+    handler: async ({ store }) => {
+      const s = await getStore(store);
+      try {
+        return await disconnectMercadoPago(s.id);
       } catch (e) {
         throw new UserError((e as Error).message);
       }

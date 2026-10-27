@@ -1,8 +1,9 @@
 import { db } from "@/lib/db";
 import {
-  clasificarPago, leerPagoAutorizado, leerPreapproval, montoDe,
+  clasificarPago, leerPagoAutorizado, leerPreapproval, leerPago, montoDe, pagoAcreditado,
   type PagoAutorizado, type Preapproval,
 } from "@/lib/mercadopago";
+import { fulfill } from "@/lib/fulfill";
 
 /**
  * Los eventos de suscripcion de Mercado Pago.
@@ -57,6 +58,9 @@ export async function manejarEventoMercadoPago(
     return { ignorado: "sin data.id" };
   }
 
+  if (tipo === "payment") {
+    return compra(ctx, id, evento);
+  }
   if (tipo === "subscription_authorized_payment") {
     return cobro(ctx, id, evento);
   }
@@ -67,6 +71,68 @@ export async function manejarEventoMercadoPago(
   // Un tipo que no manejamos no es un error: Mercado Pago manda varios y el
   // webhook puede estar suscripto a mas de los que nos importan.
   return { ignorado: tipo || "sin tipo" };
+}
+
+// ------------------------------------------------------- la compra de una vez
+
+/**
+ * `payment`: el cobro de Checkout Pro. Es lo que entrega el kit.
+ *
+ * El aviso trae solo un id: el pago se lee de la API. Eso no es ceremonia --
+ * un cuerpo se puede falsificar, y aunque la firma ya valido, leer el recurso
+ * de la fuente es lo que garantiza que el importe que se entrega es el que
+ * Mercado Pago cobro de verdad.
+ *
+ * `fulfill` es la MISMA funcion que usa Whop: no hay una entrega por pasarela.
+ * Lo unico propio de aqui es traducir el pago a sus argumentos.
+ */
+async function compra(
+  ctx: { storeId: string; token: string }, pagoId: string, evento: unknown,
+): Promise<ResultadoEvento> {
+  const pago = await leerPago(ctx.token, pagoId);
+  const meta = (pago.metadata ?? {}) as Record<string, string>;
+
+  // Sin tienda ni embudo la entrega no sabe que mandar. Pasa si el pago se creo
+  // fuera de nuestro checkout (un link de pago hecho a mano en el panel de
+  // Mercado Pago, por ejemplo): se anota y no se inventa nada.
+  if (!meta.store || !meta.funnel) {
+    await crudo(ctx.storeId,
+      `pago ${pagoId} sin metadata de tienda/embudo (external_reference: ${pago.external_reference ?? "—"})`,
+      { evento, pago });
+    return { ignorado: "pago sin metadata" };
+  }
+
+  const acreditado = pagoAcreditado(pago);
+  const importe = Number(pago.transaction_amount);
+  if (acreditado && !(Number.isFinite(importe) && importe > 0)) {
+    // Error a proposito: Mercado Pago reintenta. Entregar con importe 0 deja
+    // el balance mintiendo y no se puede corregir despues.
+    throw new Error(`pago ${pagoId} aprobado y sin importe legible`);
+  }
+
+  const nombre = [pago.payer?.first_name, pago.payer?.last_name].filter(Boolean).join(" ")
+    || pago.additional_info?.payer?.first_name || null;
+
+  await fulfill({
+    provider: "mercadopago",
+    // Mismo prefijo que Whop por el mismo motivo: la columna se llama
+    // stripe_payment_intent y es anterior a que hubiera mas de una pasarela.
+    paymentId: `mercadopago:${pago.id}`,
+    customerId: null,
+    email: (pago.payer?.email ?? "").trim().toLowerCase() || null,
+    name: nombre,
+    phone: null,
+    country: null,
+    currency: (pago.currency_id ?? "ars").toLowerCase(),
+    amountTotal: Number.isFinite(importe) ? importe : 0,
+    metadata: meta,
+    // `paid` decide si se entrega. Un pago en efectivo (Rapipago) entra como
+    // `pending` y se vuelve `approved` cuando la persona paga en el local:
+    // Mercado Pago manda OTRO aviso, y ahi si entrega.
+    paid: acreditado,
+  });
+
+  return { compra: pagoId, estado: pago.status, entregado: acreditado };
 }
 
 // ------------------------------------------------------------------ el cobro
