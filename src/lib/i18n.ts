@@ -91,6 +91,17 @@ type Dict = {
   upsellFailed: string;
   /** email */
   mailSubject: (store: string) => string;
+  // La pagina de la descarga directa (/d/...). Es lo ultimo que ve quien
+  // compro, y hasta el 26/10/2026 estaba en español FIJO para las dos tiendas:
+  // un comprador britanico con un link vencido leia «Pedido no encontrado ·
+  // Revisá el link del mail» -- en español y ademas en voseo, que no es el
+  // registro de ninguna de las dos.
+  dlBadLink: string;
+  dlNotFound: string;
+  dlCheckLink: string;
+  dlRefunded: string;
+  dlPending: (soporte: string) => string;
+  dlNotInOrder: (soporte: string) => string;
   mailHi: (name: string | null) => string;
   mailReady: (store: string) => string;
   mailOpen: (p: string) => string;
@@ -183,6 +194,12 @@ export const T: Record<Locale, Dict> = {
     continueToDownloads: "Vai ai tuoi download",
     upsellFailed: "Non siamo riusciti ad addebitare la carta. Il tuo ordine è comunque confermato.",
     mailSubject: (s) => `Il tuo download da ${s} è pronto`,
+    dlBadLink: "Link non valido",
+    dlNotFound: "Ordine non trovato",
+    dlCheckLink: "Controlla il link della mail.",
+    dlRefunded: "Questo ordine è stato rimborsato.",
+    dlPending: (s) => `Il pagamento non risulta ancora accreditato. Se hai già pagato, scrivici a ${s}.`,
+    dlNotInOrder: (s) => `Questo prodotto non fa parte dell’ordine. Scrivici a ${s}.`,
     mailHi: (n) => (n ? `Ciao ${n},` : "Ciao,"),
     mailReady: (s) => `Il tuo materiale da <strong>${s}</strong> è pronto.`,
     mailOpen: (p) => `Apri ${p}`,
@@ -269,6 +286,12 @@ export const T: Record<Locale, Dict> = {
     continueToDownloads: "Go to your downloads",
     upsellFailed: "We could not charge your card. Your order is still confirmed.",
     mailSubject: (s) => `Your download from ${s} is ready`,
+    dlBadLink: "Invalid link",
+    dlNotFound: "Order not found",
+    dlCheckLink: "Check the link in your email.",
+    dlRefunded: "This order was refunded.",
+    dlPending: (s) => `The payment has not cleared yet. If you have already paid, write to us at ${s}.`,
+    dlNotInOrder: (s) => `This product is not part of the order. Write to us at ${s}.`,
     mailHi: (n) => (n ? `Hi ${n},` : "Hi,"),
     mailReady: (s) => `Your material from <strong>${s}</strong> is ready.`,
     mailOpen: (p) => `Open ${p}`,
@@ -355,6 +378,12 @@ export const T: Record<Locale, Dict> = {
     continueToDownloads: "Ir a mis descargas",
     upsellFailed: "No pudimos cobrar la tarjeta. Tu pedido igual está confirmado.",
     mailSubject: (s) => `Tu descarga de ${s} ya está lista`,
+    dlBadLink: "Enlace no válido",
+    dlNotFound: "Pedido no encontrado",
+    dlCheckLink: "Revisa el enlace del correo.",
+    dlRefunded: "Este pedido fue reembolsado.",
+    dlPending: (s) => `El pago todavía no está acreditado. Si ya pagaste, escríbenos a ${s}.`,
+    dlNotInOrder: (s) => `Este producto no es parte del pedido. Escríbenos a ${s}.`,
     mailHi: (n) => (n ? `Hola ${n},` : "Hola,"),
     mailReady: (s) => `Tu material de <strong>${s}</strong> ya está listo.`,
     mailOpen: (p) => `Abrir ${p}`,
@@ -441,6 +470,12 @@ export const T: Record<Locale, Dict> = {
     continueToDownloads: "Ir para meus downloads",
     upsellFailed: "Não conseguimos cobrar o cartão. Seu pedido continua confirmado.",
     mailSubject: (s) => `Seu download da ${s} está pronto`,
+    dlBadLink: "Link inválido",
+    dlNotFound: "Pedido não encontrado",
+    dlCheckLink: "Confere o link do e-mail.",
+    dlRefunded: "Este pedido foi reembolsado.",
+    dlPending: (s) => `O pagamento ainda não foi aprovado. Se você já pagou, escreve para ${s}.`,
+    dlNotInOrder: (s) => `Este produto não faz parte do pedido. Escreve para ${s}.`,
     mailHi: (n) => (n ? `Olá ${n},` : "Olá,"),
     mailReady: (s) => `Seu material da <strong>${s}</strong> está pronto.`,
     mailOpen: (p) => `Abrir ${p}`,
@@ -524,6 +559,12 @@ export const T: Record<Locale, Dict> = {
     continueToDownloads: "Aller à mes téléchargements",
     upsellFailed: "Nous n'avons pas pu débiter ta carte. Ta commande reste confirmée.",
     mailSubject: (s) => `Ton téléchargement ${s} est prêt`,
+    dlBadLink: "Lien invalide",
+    dlNotFound: "Commande introuvable",
+    dlCheckLink: "Vérifie le lien de l’e-mail.",
+    dlRefunded: "Cette commande a été remboursée.",
+    dlPending: (s) => `Le paiement n’est pas encore validé. Si tu as déjà payé, écris-nous à ${s}.`,
+    dlNotInOrder: (s) => `Ce produit ne fait pas partie de la commande. Écris-nous à ${s}.`,
     mailHi: (n) => (n ? `Bonjour ${n},` : "Bonjour,"),
     mailReady: (s) => `Ton contenu <strong>${s}</strong> est prêt.`,
     mailOpen: (p) => `Ouvrir ${p}`,
@@ -607,6 +648,12 @@ export const T: Record<Locale, Dict> = {
     continueToDownloads: "Zu meinen Downloads",
     upsellFailed: "Wir konnten deine Karte nicht belasten. Deine Bestellung ist trotzdem bestätigt.",
     mailSubject: (s) => `Dein Download von ${s} ist bereit`,
+    dlBadLink: "Ungültiger Link",
+    dlNotFound: "Bestellung nicht gefunden",
+    dlCheckLink: "Prüfe den Link in der E-Mail.",
+    dlRefunded: "Diese Bestellung wurde erstattet.",
+    dlPending: (s) => `Die Zahlung ist noch nicht eingegangen. Wenn du schon bezahlt hast, schreib uns an ${s}.`,
+    dlNotInOrder: (s) => `Dieses Produkt gehört nicht zur Bestellung. Schreib uns an ${s}.`,
     mailHi: (n) => (n ? `Hallo ${n},` : "Hallo,"),
     mailReady: (s) => `Dein Material von <strong>${s}</strong> ist bereit.`,
     mailOpen: (p) => `${p} öffnen`,
