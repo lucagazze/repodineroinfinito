@@ -116,6 +116,17 @@ def main():
         sys.exit("\n  El producto no tiene precio en USD.\n")
     importe = float(precio[0]["amount"])
 
+    # PRECIO DE RENOVACION, APARTE DEL PRIMERO.
+    #   Hasta el 26/10/2026 este script ponia initial_price = renewal_price, o
+    #   sea el mismo importe para siempre. Para una suscripcion normal esta
+    #   bien; para una PRUEBA no: «el primer mes a 1 dolar» con los dos precios
+    #   iguales cobra 1 dolar para siempre y destruye el precio de 9.
+    #   El molde ingles (the-weekly-screen-trial) es 1,0 / 9,0 justamente por
+    #   eso. Sin --renovacion el comportamiento es el de antes.
+    renovacion = importe
+    if "--renovacion" in sys.argv:
+        renovacion = float(sys.argv[sys.argv.index("--renovacion") + 1])
+
     k = llave(sid)
     m = whop(k, f"/plans/{molde['whop_plan_id']}")
     prod_whop = m["product"]["id"]
@@ -123,7 +134,11 @@ def main():
     print(f"\n  Molde  {slug_molde}  ->  {m['id']}")
     print(f"    plan_type {m['plan_type']} · billing_period {m['billing_period']} dias"
           f" · {m['initial_price']} / {m['renewal_price']} · producto {prod_whop}")
-    print(f"\n  Nuevo  {slug_prod}  ->  USD {importe} cada {p['billing_period_days']} dias")
+    print(f"\n  Nuevo  {slug_prod}  ->  USD {importe} el primer periodo"
+          + (f", despues USD {renovacion}" if renovacion != importe else "")
+          + f", cada {p['billing_period_days']} dias")
+    if renovacion != importe:
+        print(f"    (initial_price {importe} / renewal_price {renovacion})")
     if p["whop_plan_id"]:
         print(f"    ya tiene plan: {p['whop_plan_id']}. Nada que hacer.\n"); return
     if not crear:
@@ -141,7 +156,7 @@ def main():
         "currency": "usd",
         "billing_period": p["billing_period_days"],
         "initial_price": importe,
-        "renewal_price": importe,
+        "renewal_price": renovacion,
         "visibility": "hidden",          # solo se vende desde el post-pago
         "unlimited_stock": True,
         "description": p["short_name"],

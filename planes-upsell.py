@@ -113,7 +113,16 @@ def pasos_del_postpago(store_id):
     for f in pps:
         st = supabase("GET", f"pp_steps?select=sort_order,product_id&pp_funnel_id=eq.{f['id']}&order=sort_order")
         for s in st:
-            p = supabase("GET", f"products?select=id,slug,short_name,name,whop_plan_id&id=eq.{s['product_id']}")[0]
+            p = supabase("GET", f"products?select=id,slug,short_name,name,whop_plan_id,subscription&id=eq.{s['product_id']}")[0]
+            # LAS SUSCRIPCIONES NO PASAN POR AQUI.
+            #   Este script crea planes `one_time`, y no filtraba por
+            #   `subscription`. El 26/10/2026 estuvo a punto de crear uno para
+            #   «vision-semanal-prueba»: habria cobrado 1 dolar UNA VEZ y no
+            #   habria renovado nunca -- una suscripcion que no suscribe, y
+            #   nadie se entera hasta que falta el segundo mes.
+            #   Las recurrentes las crea planes-suscripcion.py.
+            if p.get("subscription"):
+                continue
             pr = supabase("GET", f"product_prices?select=amount,currency&product_id=eq.{p['id']}&currency=eq.USD")
             p["precio"] = float(pr[0]["amount"]) if pr else None
             p["embudo"] = f["name"]
