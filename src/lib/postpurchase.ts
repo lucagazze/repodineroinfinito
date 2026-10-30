@@ -313,7 +313,7 @@ async function forcedFunnel(storeId: string, checkoutFunnelId: string, ppId: str
 type ChainLike = { steps: Product[]; meta?: StepMeta[]; owned: Set<string>; checkoutOwned?: Set<string> };
 const isDownsell = (c: ChainLike, i: number) => c.meta?.[i]?.kind === "downsell";
 
-type Owned = Pick<Product, "id" | "includes" | "variant_of"> & { is_library?: boolean | null };
+export type Owned = Pick<Product, "id" | "includes" | "variant_of"> & { is_library?: boolean | null };
 /** El producto «de verdad»: una variante de precio cuenta como su base. */
 export const baseOf = (p: Pick<Product, "id" | "variant_of">) => p.variant_of ?? p.id;
 /** Lo que trae, como productos base: lo que incluye si es un pack, o él mismo. */

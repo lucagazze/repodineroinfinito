@@ -138,16 +138,38 @@ def main():
     if not pasos:
         sys.exit("\n  No hay cadena de post-pago activa.\n")
 
-    # El producto de Whop bajo el que colgar los planes: el mismo del plan
-    # principal, para no dispersar el catalogo de la cuenta.
+    # El producto de Whop bajo el que colgar los planes.
+    #
+    #   PRIMERO el del plan principal, para no dispersar el catalogo de la
+    #   cuenta. PERO ese camino depende de que algun embudo tenga
+    #   `whop_plan_id`, y medido el 29/10/2026 los TRES embudos de Physics lo
+    #   tienen en NULL: el script salia por `sys.exit` sin crear un solo plan.
+    #   El comprador habria aceptado un OTO y no se le habria cobrado.
+    #
+    #   Asi que si no hay embudo con plan, se le pregunta a Whop por el
+    #   producto de la cuenta, que es lo que hace rehacer-planes-physics.py y
+    #   lo que de verdad hace falta: el plan cuelga de un producto, no de otro
+    #   plan.
     emb_filas = supabase("GET", f"funnels?select=slug,whop_plan_id&store_id=eq.{store_id}&whop_plan_id=not.is.null&order=slug")
-    if not emb_filas:
-        sys.exit(f"\n  {slug} no tiene ningun embudo con plan de Whop del que colgar los nuevos.\n")
-    emb = emb_filas[0]
-    base = whop(k, f"/plans/{emb['whop_plan_id']}")
-    prod_whop = base["product"]["id"]
+    if emb_filas:
+        emb = emb_filas[0]
+        base = whop(k, f"/plans/{emb['whop_plan_id']}")
+        if "_error" in base:
+            sys.exit(f"\n  No pude leer el plan {emb['whop_plan_id']}: {base.get('_body')}\n")
+        prod_whop = base["product"]["id"]
+        de_donde = f"embudo «{emb['slug']}»"
+    else:
+        r = whop(k, f"/products?account_id={empresa}&limit=1")
+        if "_error" in r:
+            sys.exit(f"\n  La llave de {slug} no sirve ({r['_error']}): {r.get('_body')}\n")
+        hay = r.get("data") or []
+        if not hay:
+            sys.exit(f"\n  La empresa {empresa} no tiene ningun producto de Whop donde colgar los planes.\n"
+                     f"  Crealo una vez (visibility hidden) y volve a correr esto.\n")
+        prod_whop = hay[0]["id"]
+        de_donde = f"producto de la cuenta «{hay[0].get('title')}»"
 
-    print(f"\n  Tienda {slug}  ·  empresa {empresa}  ·  embudo «{emb['slug']}»"
+    print(f"\n  Tienda {slug}  ·  empresa {empresa}  ·  {de_donde}"
           f"  ·  producto de Whop {prod_whop}\n")
     faltan = []
     for p in pasos:

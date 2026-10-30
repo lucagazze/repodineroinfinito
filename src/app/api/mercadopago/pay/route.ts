@@ -10,6 +10,7 @@ import { currencyFrom, quoteFrom } from "@/lib/pricing";
 import { trackingFrom } from "@/lib/meta";
 import { conexionDe } from "@/lib/mercadopago-connect";
 import { crearPreferencia, type ItemPreferencia } from "@/lib/mercadopago";
+import { revisarDuplicado, textoDuplicado } from "@/lib/ya-lo-tiene";
 
 export const runtime = "nodejs";
 
@@ -82,6 +83,24 @@ export async function POST(req: NextRequest) {
     const q2 = prev ? quoteFrom(data, { currency, bumpSlugs, exitDiscount: body.exit === true, rates: prev, recovery }) : null;
     if (q2 && Math.abs(q2.total - visto) < 0.005) q = q2;
     else console.warn("[mercadopago/pay] total distinto al mostrado", funnelSlug, currency, visto, q.total);
+  }
+
+
+  // NO COBRARLE DOS VECES EL MISMO LIBRO.
+  //   `overlapsOwned` dice de si mismo «nunca se cobra dos veces un libro»,
+  //   pero hasta el 29/10/2026 solo lo respetaban la biblioteca y el
+  //   post-pago: el checkout no preguntaba nunca. En Physics eso dejaba cinco
+  //   caminos abiertos (ver lib/ya-lo-tiene.ts). Aca si se conoce el mail, que
+  //   es lo que la pagina todavia no tiene.
+  //   Se frena SOLO el duplicado puro; tener una pieza de un pack no frena
+  //   nada, porque el resto es una compra legitima.
+  if (email) {
+    const v = await revisarDuplicado(tienda.id, email, q.lines[0].product);
+    if (v.duplicado) {
+      console.warn("[mercadopago/pay] duplicado frenado", funnelSlug, q.lines[0].product.slug, email);
+      return NextResponse.json({ error: textoDuplicado(ajustes.locale), code: "ya_lo_tiene" }, { status: 409 });
+    }
+    if (v.parcial) console.warn("[mercadopago/pay] compra parcial", funnelSlug, q.lines[0].product.slug, v.piezas);
   }
 
   const locale: Locale = pickLocale({
