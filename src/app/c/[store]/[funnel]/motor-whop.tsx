@@ -257,6 +257,24 @@ export function ProveedorWhop({
         currency={p.currency.toLowerCase()}
         amount={Math.max(1, toMinor(total, p.currency))}
         returnUrl={volver}
+        /*
+          SIN ACH (debito bancario de EE. UU.).
+          No es una cuestion de prolijidad: ACH acredita en dias habiles, y la
+          ENTREGA la dispara el webhook `payment.succeeded`, que con ACH llega
+          cuando el banco liquida. O sea que quien pagara por ahi leeria una
+          promesa de entrega --«instant access» en Physics, «within 48 hours» en
+          Maths-- y recibiria el libro la semana siguiente. La promesa se rompe
+          sola, sin que nadie se entere hasta que el comprador reclama.
+
+          Tampoco sirve para el post-pago de 1 clic, que es lo que
+          `setupFutureUsage` deja armado abajo.
+
+          El SDK no deja apagar metodos sueltos desde el elemento --`order` dice
+          de si mismo «does not affect availability», y los unicos `never` son
+          los tres monederos--. Lo que si existe es este filtro de cuenta, donde
+          `disabled` quita tipos.
+        */
+        paymentMethodConfiguration={{ disabled: ["us_bank_account"] }}
         // Guarda la tarjeta para el post-pago de 1 clic. No se puede pedir en
         // diferido: sin esto hoy, los compradores de los primeros meses quedan
         // fuera de cualquier upsell que se arme despues.
