@@ -150,10 +150,12 @@ function deliveryHtml(a: DeliveryArgs) {
 <html lang="${a.locale}"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="light"><meta name="supported-color-schemes" content="light">
-<title>${esc(c.subject || t.mailSubject(shown))}</title>
+<title>${esc(c.subject || (a.main.presale ? t.mailSubjectPresale(shown) : t.mailSubject(shown)))}</title>
 </head>
 <body style="margin:0;padding:0;background:#f0f0f0;-webkit-text-size-adjust:100%">
-<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent">${esc(t.mailPreheader(a.main.short_name))}&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</div>
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent">${esc(a.main.presale
+  ? t.mailPreheaderPresale(a.main.short_name, a.main.presale_days ?? 3)
+  : t.mailPreheader(a.main.short_name))}&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</div>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#f0f0f0">
 <tr><td align="center" style="padding:28px 12px">
 
@@ -167,7 +169,7 @@ ${c.headerImage ? `<tr><td style="line-height:0;font-size:0"><img src="${esc(c.h
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
 
 <tr><td align="center" style="font-family:${FONT}">
-<p style="margin:0;font-size:26px;font-weight:700;line-height:1.25;color:${INK};letter-spacing:-.02em">${esc(t.mailHeadline)}</p>
+<p style="margin:0;font-size:26px;font-weight:700;line-height:1.25;color:${INK};letter-spacing:-.02em">${esc(a.main.presale ? t.mailHeadlinePresale : t.mailHeadline)}</p>
 <p style="margin:10px 0 0;font-size:15px;line-height:1.55;color:${MUTED}">${c.welcome ? para(c.welcome, first) : esc(t.mailThanks(first, shown))}</p>
 </td></tr>
 
@@ -225,7 +227,10 @@ ${esc(t.mailSupport)}<br>${esc(legal)} · ${esc(a.store.support_email)}
 }
 
 export function renderDelivery(a: DeliveryArgs) {
-  const subject = customOf(a.store, a.locale).subject || T[a.locale].mailSubject(a.store.display_name || a.store.name);
+  const shown = a.store.display_name || a.store.name;
+  // En preventa el asunto NO puede decir «tu descarga ya esta lista»: no hay descarga.
+  const subject = customOf(a.store, a.locale).subject
+    || (a.main.presale ? T[a.locale].mailSubjectPresale(shown) : T[a.locale].mailSubject(shown));
   return { subject, html: deliveryHtml(a) };
 }
 
