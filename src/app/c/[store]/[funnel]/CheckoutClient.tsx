@@ -47,7 +47,8 @@ export type Props = {
   pixels: string[];
   storeName: string; legalName: string; legalAddress: string; statementName: string;
   supportEmail: string; payColor: string; guaranteeDays: number; guaranteeImage: string | null;
-  main: { name: string; shortName: string; image: string | null; amount: number; compareAt: number | null };
+  main: { name: string; shortName: string; image: string | null; amount: number; compareAt: number | null;
+    /** Preventa: en cuantos dias llega (null = ya esta). */ presaleDays?: number | null };
   included: { name: string }[];
   bonuses: { name: string; displayValue: number | null }[];
   offers: Offer[];
@@ -455,6 +456,7 @@ function CheckoutForm({
             <div>
               <p>{st.offer.title || p.main.name}</p>
               {st.offer.subtitle && <small className="ck-sub">{st.offer.subtitle}</small>}
+              {p.main.presaleDays != null && <span className="ck-presale">{t.presaleNote(p.main.presaleDays)}</span>}
               <b>
                 {exitOn && st.offer.showCompareAt && <s className="ck-was">{fmt(p.main.amount)}</s>}
                 {!exitOn && p.recovery && "token" in p.recovery && p.main.compareAt != null && <s className="ck-was">{fmt(p.main.compareAt)}</s>}
@@ -557,6 +559,7 @@ function CheckoutForm({
                         )}
                         <div className="ck-b2Desc">{o.description}</div>
                       </div>
+                      {o.presaleDays != null && <span className="ck-presale">{t.presaleBadge(o.presaleDays)}</span>}
                       <div className="ck-b2Price">
                         <b>{fmt(o.amount)}</b>
                         {o.compareAt != null && <s>{fmt(o.compareAt)}</s>}
@@ -583,6 +586,7 @@ function CheckoutForm({
                         <b>+{fmt(o.amount)}</b>
                       </p>
                       <p className="ck-bumpDesc">{o.description}</p>
+                      {o.presaleDays != null && <span className="ck-presale">{t.presaleBadge(o.presaleDays)}</span>}
                       <button type="button" className={`ck-bumpBtn${on ? " on" : ""}`}
                         disabled={syncing || busy} onClick={(e) => { e.stopPropagation(); toggle(o.slug); }}>
                         {on ? t.ckAdded : t.ckAddToOrder}
@@ -609,6 +613,7 @@ function CheckoutForm({
               <span>
                 {st.offer.title || p.main.name}
                 {st.offer.subtitle && <small className="ck-sub">{st.offer.subtitle}</small>}
+                {p.main.presaleDays != null && <small className="ck-presale">{t.presaleNote(p.main.presaleDays)}</small>}
               </span>
               <b>
                 {exitOn && st.offer.showCompareAt && <s className="ck-was">{fmt(p.main.amount)}</s>}

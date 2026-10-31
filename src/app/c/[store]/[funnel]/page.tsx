@@ -159,6 +159,8 @@ export default async function CheckoutPage({
           image: q.lines[0].product.image_url,
           amount: q.lines[0].amount,
           compareAt: q.lines[0].compareAt,
+          // Preventa: el plazo se dice ANTES de cobrar, no en la biblioteca despues de pagar.
+          presaleDays: q.lines[0].product.presale ? q.lines[0].product.presale_days ?? 3 : null,
         }}
         included={q.included.map((p) => ({ name: p.short_name }))}
         bonuses={q.bonuses.map((b) => ({ name: b.product.short_name, displayValue: b.displayValue }))}

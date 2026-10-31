@@ -121,6 +121,9 @@ type Dict = {
   /** Preventa (055): la línea de la oferta y del bump, y la etiqueta del mail. */
   presaleNote: (days: number) => string;
   presaleBadge: (days: number) => string;
+  /** Preventa, en el mail de entrega: reemplaza al boton de descarga, que todavia no existe. */
+  mailPresaleTitle: string;
+  mailPresaleBody: (days: number) => string;
   mailPaid: string;
   mailGuaranteeTitle: (d: number) => string;
   mailGuaranteeBody: string;
@@ -220,6 +223,8 @@ export const T: Record<Locale, Dict> = {
     mailInside: "Dentro la cartella",
     presaleNote: (d) => `📦 In prevendita · ti arriva via email entro ${d} giorni`,
     presaleBadge: (d) => `Arriva entro ${d} giorni`,
+    mailPresaleTitle: `Il tuo libro sta arrivando`,
+    mailPresaleBody: (d) => `Ti arriva per email entro ${d} giorni. Non devi fare nulla: quando è pronto te lo mandiamo a questo stesso indirizzo.`,
     mailPaid: "Totale pagato",
     mailGuaranteeTitle: (d) => `Garanzia di ${d} giorni`,
     mailGuaranteeBody: "Se c'è un problema reale (un file che non si apre o un contenuto diverso da quello descritto), rispondi a questa email e raccontaci cosa è successo: lo risolviamo o ti rimborsiamo. È un PDF digitale e non spediamo nulla: aspettarsi un libro stampato o cambiare idea dopo il download non danno diritto al rimborso.",
@@ -313,6 +318,8 @@ export const T: Record<Locale, Dict> = {
     mailInside: "Inside the folder",
     presaleNote: (d) => `📦 Pre-order · delivered to your email within ${d} days`,
     presaleBadge: (d) => `Arrives within ${d} days`,
+    mailPresaleTitle: `Your book is on its way`,
+    mailPresaleBody: (d) => `It arrives by email within ${d} days. You do not have to do anything — when it is ready we send it to this same address.`,
     mailPaid: "Total paid",
     mailGuaranteeTitle: (d) => `${d}-day guarantee`,
     mailGuaranteeBody: "If something is genuinely wrong (a file won't open, or the content isn't what we describe), reply to this email and tell us what happened: we'll fix it or refund you. It's a digital PDF and nothing is shipped, so expecting a printed book or changing your mind after downloading aren't grounds for a refund.",
@@ -406,6 +413,8 @@ export const T: Record<Locale, Dict> = {
     mailInside: "Dentro de la carpeta",
     presaleNote: (d) => `📦 Preventa · te llega por email en ${d} días`,
     presaleBadge: (d) => `Llega en ${d} días`,
+    mailPresaleTitle: `Tu libro está en camino`,
+    mailPresaleBody: (d) => `Te llega por email en ${d} días. No tenés que hacer nada: cuando esté listo te lo mandamos a esta misma dirección.`,
     mailPaid: "Total pagado",
     mailGuaranteeTitle: (d) => `Garantía de ${d} días`,
     mailGuaranteeBody: "Si hay un problema real (un archivo que no abre o un contenido distinto al que describimos), responde a este email y cuéntanos qué ha pasado: lo solucionamos o te devolvemos el dinero. Es un PDF digital y no se envía nada físico: esperar un libro impreso o arrepentirse después de descargarlo no son motivo de reembolso.",
@@ -499,6 +508,8 @@ export const T: Record<Locale, Dict> = {
     mailInside: "Dentro da pasta",
     presaleNote: (d) => `📦 Pré-venda · chega no seu e-mail em até ${d} dias`,
     presaleBadge: (d) => `Chega em até ${d} dias`,
+    mailPresaleTitle: `Seu livro está a caminho`,
+    mailPresaleBody: (d) => `Chega por e-mail em até ${d} dias. Você não precisa fazer nada: quando estiver pronto enviamos para este mesmo endereço.`,
     mailPaid: "Total pago",
     mailGuaranteeTitle: (d) => `Garantia de ${d} dias`,
     mailGuaranteeBody: "Se houver um problema real (um arquivo que não abre ou um conteúdo diferente do descrito), responda este email e conte o que aconteceu: resolvemos ou devolvemos seu dinheiro. É um PDF digital e nada é enviado: esperar um livro impresso ou mudar de ideia depois do download não dão direito a reembolso.",
@@ -589,6 +600,8 @@ export const T: Record<Locale, Dict> = {
     mailInside: "Dans le dossier",
     presaleNote: (d) => `📦 Prévente · tu le reçois par e-mail sous ${d} jours`,
     presaleBadge: (d) => `Arrive sous ${d} jours`,
+    mailPresaleTitle: `Ton livre arrive`,
+    mailPresaleBody: (d) => `Il arrive par e-mail sous ${d} jours. Tu n'as rien à faire : dès qu'il est prêt, on te l'envoie à cette même adresse.`,
     mailPaid: "Total payé",
     mailGuaranteeTitle: (d) => `Garantie de ${d} jours`,
     mailGuaranteeBody: "S'il y a un vrai problème (un fichier qui ne s'ouvre pas ou un contenu différent de celui décrit), réponds à cet e-mail et raconte-nous ce qui s'est passé : on le règle ou on te rembourse. C'est un PDF numérique et rien n'est expédié : attendre un livre imprimé ou changer d'avis après le téléchargement ne donnent pas droit à un remboursement.",
@@ -679,6 +692,8 @@ export const T: Record<Locale, Dict> = {
     mailInside: "Im Ordner",
     presaleNote: (d) => `📦 Vorverkauf · kommt innerhalb von ${d} Tagen per E-Mail`,
     presaleBadge: (d) => `Kommt in ${d} Tagen`,
+    mailPresaleTitle: `Dein Buch ist unterwegs`,
+    mailPresaleBody: (d) => `Es kommt innerhalb von ${d} Tagen per E-Mail. Du musst nichts tun — sobald es fertig ist, schicken wir es an diese Adresse.`,
     mailPaid: "Bezahlt",
     mailGuaranteeTitle: (d) => `${d} Tage Garantie`,
     mailGuaranteeBody: "Wenn es ein echtes Problem gibt (eine Datei lässt sich nicht öffnen oder der Inhalt entspricht nicht der Beschreibung), antworte auf diese E-Mail und erzähl uns, was passiert ist: Wir lösen es oder erstatten dir den Betrag. Es ist ein digitales PDF und es wird nichts verschickt: Ein erwartetes gedrucktes Buch oder eine Meinungsänderung nach dem Download sind kein Erstattungsgrund.",

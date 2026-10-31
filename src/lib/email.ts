@@ -69,7 +69,10 @@ function button(href: string, label: string, opts: { big?: boolean; color?: stri
 function itemRow(p: Product, t: (typeof T)[Locale], mainFolder: string | null, color: string, orderId?: string, storeDomain?: string | null) {
   const img = cover(p);
   const href = downloadHref(p, orderId, storeDomain);
-  const action = href
+  // Un producto en preventa no se baja todavia: lleva el plazo en vez del boton, igual que en la biblioteca.
+  const action = p.presale
+    ? `<span style="display:inline-block;font-family:${FONT};font-size:11px;font-weight:700;color:#92400e;background:#fef3c7;border-radius:5px;padding:4px 8px">${esc(t.presaleBadge(p.presale_days ?? 3))}</span>`
+    : href
     ? button(href, t.mailDownload, { color })
     : `<span style="display:inline-block;font-family:${FONT};font-size:11px;font-weight:700;color:#15803d;background:#dcfce7;border-radius:5px;padding:4px 8px">${esc(mainFolder ? t.mailInside : t.ckFree)}</span>`;
   return `<tr><td style="padding:14px 0;border-top:1px solid ${LINE}">
@@ -176,7 +179,17 @@ ${hero ? `<tr><td align="center" style="padding:26px 0 6px">
 <p style="margin:0;font-size:18px;font-weight:700;line-height:1.3;color:${INK}">${esc(a.main.name)}</p>
 </td></tr>
 
-${url ? `<tr><td align="center">${button(url, t.mailOpen(a.main.short_name), { big: true, color })}</td></tr>
+${a.main.presale
+  // Preventa: no hay archivo todavia, asi que no va boton de descarga -- mandaria a una carpeta sin libro.
+  // En su lugar, el plazo, que es lo unico cierto en este momento.
+  ? `<tr><td style="padding:4px 0 0">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#fef3c7" style="border-radius:12px">
+<tr><td align="center" style="padding:20px 18px;font-family:${FONT}">
+<p style="margin:0;font-size:16px;font-weight:700;color:#92400e">&#128230; ${esc(t.mailPresaleTitle)}</p>
+<p style="margin:7px 0 0;font-size:14px;line-height:1.55;color:#92400e">${esc(t.mailPresaleBody(a.main.presale_days ?? 3))}</p>
+</td></tr></table>
+</td></tr>`
+  : url ? `<tr><td align="center">${button(url, t.mailOpen(a.main.short_name), { big: true, color })}</td></tr>
 ${esDrive(url) ? `<tr><td align="center" style="padding:12px 0 0;font-family:${FONT};font-size:12px;line-height:1.5;color:${MUTED}">${esc(t.mailTip)}</td></tr>` : ""}` : ""}
 
 <tr><td style="padding:30px 0 4px;font-family:${FONT};font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:${MUTED}">${esc(t.mailYourOrder)}</td></tr>

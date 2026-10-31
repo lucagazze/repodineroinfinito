@@ -78,6 +78,10 @@ export const CHECKOUT_CSS = `
 .ck-bumpPrice s { color:#9ca3af; margin-right:6px; }
 .ck-bumpPrice b { color:var(--ok); font-weight:700; }
 .ck-bumpDesc { margin:6px 0 0; font-size:11.5px; line-height:1.45; color:var(--muted); }
+/* Preventa: el plazo de entrega, en la cabecera del producto, en el resumen y en cada bump.
+   Ambar y no gris: es una condicion de la compra, no una nota al pie. */
+.ck-presale { display:inline-block; margin:6px 0 0; padding:3px 8px; border-radius:999px;
+  background:#fef3c7; color:#92400e; font-size:11.5px; font-weight:600; line-height:1.35; }
 .ck-bumpBtn { margin-top:9px; border:0; border-radius:6px; padding:8px 10px; background:var(--navy); color:#fff;
   font-size:12px; font-weight:700; font-family:inherit; cursor:pointer; transition:filter .15s; }
 .ck-bumpBtn:hover:not(:disabled) { filter:brightness(1.25) }
