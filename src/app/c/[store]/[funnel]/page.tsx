@@ -3,7 +3,7 @@ import { pasarelaParaComprador } from "@/lib/pasarela";
 import { brandFor } from "@/lib/brand";
 import { notFound } from "next/navigation";
 import { headers } from "next/headers";
-import { quoteFrom, bumpOffersFrom, currencyFrom } from "@/lib/pricing";
+import { quoteFrom, bumpOffersFrom, currencyFrom, AVISO_PREVENTA_EN_CHECKOUT } from "@/lib/pricing";
 import { pickLocale, T, type Locale } from "@/lib/i18n";
 import { db, legalOf } from "@/lib/db";
 import { getRates } from "@/lib/fx";
@@ -159,8 +159,10 @@ export default async function CheckoutPage({
           image: q.lines[0].product.image_url,
           amount: q.lines[0].amount,
           compareAt: q.lines[0].compareAt,
-          // Preventa: el plazo se dice ANTES de cobrar, no en la biblioteca despues de pagar.
-          presaleDays: q.lines[0].product.presale ? q.lines[0].product.presale_days ?? 3 : null,
+          // Apagado: ver AVISO_PREVENTA_EN_CHECKOUT en src/lib/pricing.ts.
+          presaleDays: AVISO_PREVENTA_EN_CHECKOUT
+            ? (q.lines[0].product.presale ? q.lines[0].product.presale_days ?? 3 : null)
+            : null,
         }}
         included={q.included.map((p) => ({ name: p.short_name }))}
         bonuses={q.bonuses.map((b) => ({ name: b.product.short_name, displayValue: b.displayValue }))}

@@ -4,6 +4,23 @@ import { resolveSettings } from "./checkout-settings";
 import { loadCheckout, type CheckoutData } from "./checkout-data";
 
 /**
+ * ¿El checkout avisa de la preventa ANTES de cobrar?
+ *
+ * Bruno lo apagó el 01/11/2026: la píldora «Pre-order · delivered within N
+ * days» bajo el título mataba la tarjeta de producto justo donde se decide la
+ * compra. Un solo interruptor para los cuatro sitios donde salía —la tarjeta
+ * del producto en sus dos maquetas y las dos de los bumps—, para que no se
+ * apague a medias.
+ *
+ * LO QUE ESTO DEJA EN PIE, y es deliberado: el plazo sigue estando en el mail
+ * de entrega (asunto, preencabezado y cuerpo), en la página de gracias y en la
+ * biblioteca. El comprador se entera DESPUÉS de pagar, no antes. Volver a
+ * ponerlo es cambiar este false por true.
+ */
+export const AVISO_PREVENTA_EN_CHECKOUT = false;
+
+
+/**
  * Cálculo del total.
  *
  * Vive en el servidor y solo acepta SLUGS del cliente, nunca importes. Si el
@@ -159,8 +176,7 @@ export function bumpOffersFrom(funnel: Funnel, currency: string, rates: Record<s
       amount,
       compareAt,
       off: compareAt ? Math.round((1 - amount / compareAt) * 100) : null,
-      // Preventa (055): la tarjeta dice en cuántos días llega.
-      presaleDays: p.presale ? p.presale_days ?? 3 : null,
+      presaleDays: AVISO_PREVENTA_EN_CHECKOUT ? (p.presale ? p.presale_days ?? 3 : null) : null,
     }];
   });
 }
