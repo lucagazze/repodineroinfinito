@@ -23,8 +23,9 @@ export function kindMap(rows: { product_id: string; kind: string }[]) {
  * Sin pedido (simulación), un archivo propio no tiene link: queda "#".
  */
 export function thankYouItems(products: Product[], kinds: Map<string, string>, orderId: string | null,
-  opts: { sub?: (p: Product) => boolean; nota?: string; storeDomain?: string | null } = {}) {
-  const { sub, nota, storeDomain } = opts;
+  opts: { sub?: (p: Product) => boolean; nota?: string; storeDomain?: string | null;
+          presaleNota?: string } = {}) {
+  const { sub, nota, storeDomain, presaleNota } = opts;
   const sorted = [...products].sort((a, b) => (RANK[kinds.get(a.id) ?? ""] ?? 9) - (RANK[kinds.get(b.id) ?? ""] ?? 9));
   const items: TyItem[] = [];
   const included: string[] = [];
@@ -37,7 +38,12 @@ export function thankYouItems(products: Product[], kinds: Map<string, string>, o
     const archivo = p.delivery_file_name || p.delivery_file || "";
     const base = { id: p.id, slug: p.slug, name: p.short_name, image: p.image_url,
       kind: kinds.get(p.id) ?? "main", ext: archivo.split(".").pop()?.toLowerCase() };
-    if (links.length) items.push({ ...base, links });
+    // Un producto en preventa no se baja todavia. Sin esto cae en «incluido»
+    // -- un renglon de texto chico, sin tarjeta -- y el comprador acaba de pagar
+    // su libro principal y no lo ve en ningun lado. Va con nota, como la
+    // suscripcion, que es el mismo caso: hay compra y todavia no hay archivo.
+    if (p.presale) items.push({ ...base, links: [], note: presaleNota ?? "" });
+    else if (links.length) items.push({ ...base, links });
     // Una suscripcion no tiene boton y no esta «incluida»: se cobra aparte y
     // llega por mail. Va como renglon propio con lo que pasa ahora, en vez de
     // aparecer sin nada al lado -- que, justo despues de pagar, parece roto.
@@ -53,6 +59,20 @@ export function thankYouItems(products: Product[], kinds: Map<string, string>, o
  * proposito -- «este domingo» seria mentira para el que compra un domingo de
  * noche.
  */
+/**
+ * Lo que ve, justo despues de pagar, quien compro algo que todavia no existe.
+ * El plazo NO se escribe a mano: entra el numero de products.presale_days, que
+ * es el mismo con el que corre el reloj de entrega.
+ */
+export const PRESALE_NOTA: Record<Locale, (d: number) => string> = {
+  en: (d) => `No download yet \u2014 it arrives by email within ${d} days, to this same address. Nothing for you to do.`,
+  es: (d) => `Todavia no se descarga: llega por mail en ${d} dias, a esta misma direccion. No hay nada que hacer.`,
+  it: (d) => `Ancora niente download: arriva via email entro ${d} giorni, a questo stesso indirizzo. Non devi fare nulla.`,
+  "pt-BR": (d) => `Ainda nao tem download: chega por e-mail em ate ${d} dias, neste mesmo endereco. Voce nao precisa fazer nada.`,
+  fr: (d) => `Pas encore de telechargement : il arrive par e-mail sous ${d} jours, a cette meme adresse. Tu n'as rien a faire.`,
+  de: (d) => `Noch kein Download \u2014 es kommt innerhalb von ${d} Tagen per E-Mail an diese Adresse. Du musst nichts tun.`,
+};
+
 export const SUB_NOTA: Record<Locale, string> = {
   en: "No download — it arrives by email every Sunday. Your first issue is the next one out.",
   es: "No se descarga: llega por mail cada domingo. Tu primera edicion es la proxima que sale.",

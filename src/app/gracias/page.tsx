@@ -11,7 +11,7 @@ import { MetaPixel } from "@/components/MetaPixel";
 import Track from "@/components/Track";
 import { purchasePixel } from "@/lib/purchase-pixel";
 import { ThankYouView } from "./ThankYouView";
-import { kindMap, thankYouItems, thankYouTitle, SUMMARY, SUB_NOTA } from "./items";
+import { kindMap, thankYouItems, thankYouTitle, SUMMARY, SUB_NOTA, PRESALE_NOTA } from "./items";
 import { TEST_PREFIX } from "@/lib/test-purchase";
 import { PREFIJO as WHOP_PREFIX } from "@/lib/whop-events";
 
@@ -145,7 +145,12 @@ export default async function Gracias({
     sub: (p) => !!p.subscription,
     storeDomain: store?.domain ?? null,
     nota: SUB_NOTA[locale] ?? SUB_NOTA.en,
+    presaleNota: (PRESALE_NOTA[locale] ?? PRESALE_NOTA.en)(
+      Math.max(...products.filter((p) => p.presale).map((p) => p.presale_days ?? 3), 3)),
   });
+  // Si lo principal esta en preventa, la pagina NO puede abrir con «ya esta listo,
+  // bajalo aca abajo»: no hay nada que bajar. Medido el 31/10/2026.
+  const hayPreventa = products.some((p) => p.presale && (kinds.get(p.id) ?? "main") === "main");
 
   const ty = (store?.thankyou ?? {}) as Thankyou;
   const px = isTest ? null : await purchasePixel(order);
@@ -185,6 +190,7 @@ export default async function Gracias({
         showSpam={ty.showSpam !== false}
         next={ty.next ?? []}
         guaranteeDays={Number(store?.guarantee_days ?? 0)}
+        presale={hayPreventa}
       />
     </>
   );

@@ -35,6 +35,9 @@ type Texts = {
   eyebrow: (n: string) => string;
   lead: string;
   leadSent: string;
+  /** Preventa: no hay nada que bajar todavia, y decirlo es lo primero. */
+  leadPresale: string;
+  leadPresaleSent: string;
   yourPurchase: string;
   added: string;
   bonus: string;
@@ -51,6 +54,8 @@ const TX: Record<Locale, Texts> = {
     eyebrow: (n) => `✓ Payment confirmed · order ${n}`,
     lead: "Your order is ready. Download it below.",
     leadSent: "Your order is ready. Download it below — we also emailed the links to",
+    leadPresale: "Your order is confirmed. It arrives by email — nothing to download yet.",
+    leadPresaleSent: "Your order is confirmed. It arrives by email at",
     yourPurchase: "Your purchase", added: "Added to your order", bonus: "Bonus", included: "Included",
     opensDrive: "Opens in Google Drive", opensTab: "Opens in a new tab", pdf: "Downloads the PDF", sheet: "Downloads the Excel file",
     help: "Need a hand? Write to",
@@ -59,6 +64,8 @@ const TX: Record<Locale, Texts> = {
     eyebrow: (n) => `✓ Pagamento confermato · ordine ${n}`,
     lead: "Il tuo ordine è pronto. Scaricalo qui sotto.",
     leadSent: "Il tuo ordine è pronto. Scaricalo qui sotto: ti abbiamo mandato i link anche a",
+    leadPresale: "Il tuo ordine è confermato. Arriva via email: per ora non c'è niente da scaricare.",
+    leadPresaleSent: "Il tuo ordine è confermato. Arriva via email a",
     yourPurchase: "Il tuo acquisto", added: "Aggiunto al tuo ordine", bonus: "Bonus", included: "Incluso",
     opensDrive: "Si apre in Google Drive", opensTab: "Si apre in una nuova scheda", pdf: "Scarica il PDF", sheet: "Scarica il file Excel",
     help: "Serve aiuto? Scrivi a",
@@ -67,6 +74,8 @@ const TX: Record<Locale, Texts> = {
     eyebrow: (n) => `✓ Pago confirmado · pedido ${n}`,
     lead: "Tu pedido está listo. Descargalo acá abajo.",
     leadSent: "Tu pedido está listo. Descargalo acá abajo: también te mandamos los links a",
+    leadPresale: "Tu pedido está confirmado. Llega por mail: todavía no hay nada para descargar.",
+    leadPresaleSent: "Tu pedido está confirmado. Llega por mail a",
     yourPurchase: "Tu compra", added: "Sumado a tu pedido", bonus: "Bonus", included: "Incluido",
     opensDrive: "Se abre en Google Drive", opensTab: "Se abre en una pestaña nueva", pdf: "Descarga el PDF", sheet: "Descarga el archivo de Excel",
     help: "¿Necesitás ayuda? Escribí a",
@@ -75,6 +84,8 @@ const TX: Record<Locale, Texts> = {
     eyebrow: (n) => `✓ Pagamento confirmado · pedido ${n}`,
     lead: "Seu pedido está pronto. Baixe aqui embaixo.",
     leadSent: "Seu pedido está pronto. Baixe aqui embaixo: também enviamos os links para",
+    leadPresale: "Seu pedido está confirmado. Chega por e-mail: ainda não tem nada para baixar.",
+    leadPresaleSent: "Seu pedido está confirmado. Chega por e-mail em",
     yourPurchase: "Sua compra", added: "Adicionado ao seu pedido", bonus: "Bônus", included: "Incluído",
     opensDrive: "Abre no Google Drive", opensTab: "Abre em uma nova aba", pdf: "Baixa o PDF", sheet: "Baixa o arquivo do Excel",
     help: "Precisa de ajuda? Escreva para",
@@ -83,6 +94,8 @@ const TX: Record<Locale, Texts> = {
     eyebrow: (n) => `✓ Paiement confirmé · commande ${n}`,
     lead: "Ta commande est prête. Télécharge-la ci-dessous.",
     leadSent: "Ta commande est prête. Télécharge-la ci-dessous : nous t’avons aussi envoyé les liens à",
+    leadPresale: "Ta commande est confirmée. Elle arrive par e-mail : rien à télécharger pour l'instant.",
+    leadPresaleSent: "Ta commande est confirmée. Elle arrive par e-mail à",
     yourPurchase: "Ton achat", added: "Ajouté à ta commande", bonus: "Bonus", included: "Inclus",
     opensDrive: "S’ouvre dans Google Drive", opensTab: "S’ouvre dans un nouvel onglet", pdf: "Télécharge le PDF", sheet: "Télécharge le fichier Excel",
     help: "Besoin d’aide ? Écris à",
@@ -91,6 +104,8 @@ const TX: Record<Locale, Texts> = {
     eyebrow: (n) => `✓ Zahlung bestätigt · Bestellung ${n}`,
     lead: "Deine Bestellung ist fertig. Lade sie unten herunter.",
     leadSent: "Deine Bestellung ist fertig. Lade sie unten herunter – die Links haben wir dir auch geschickt an",
+    leadPresale: "Deine Bestellung ist bestätigt. Sie kommt per E-Mail — noch nichts zum Herunterladen.",
+    leadPresaleSent: "Deine Bestellung ist bestätigt. Sie kommt per E-Mail an",
     yourPurchase: "Dein Kauf", added: "Zu deiner Bestellung hinzugefügt", bonus: "Bonus", included: "Inklusive",
     opensDrive: "Öffnet sich in Google Drive", opensTab: "Öffnet sich in einem neuen Tab", pdf: "Lädt das PDF herunter", sheet: "Lädt die Excel-Datei herunter",
     help: "Brauchst du Hilfe? Schreib an",
@@ -177,6 +192,8 @@ export function ThankYouView(p: {
   next?: { kicker?: string; title: string; body?: string; bullets?: string[];
            note?: string; link?: { label: string; url: string } }[];
   guaranteeDays: number;
+  /** Lo principal esta en preventa: la pagina no puede decir «bajalo aca abajo». */
+  presale?: boolean;
   preview?: { detail?: string };
   /** Pedido real: los clics en «Descargar» se registran (site_events). */
   orderId?: string;
@@ -215,7 +232,9 @@ export function ThankYouView(p: {
             </p>
           ) : (
             <p className="lead">
-              {p.email ? <>{tx.leadSent} <strong>{p.email}</strong>.</> : tx.lead}
+              {p.presale
+                ? (p.email ? <>{tx.leadPresaleSent} <strong>{p.email}</strong>.</> : tx.leadPresale)
+                : (p.email ? <>{tx.leadSent} <strong>{p.email}</strong>.</> : tx.lead)}
             </p>
           )}
         </section>
