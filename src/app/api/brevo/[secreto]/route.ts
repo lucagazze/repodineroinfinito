@@ -146,8 +146,11 @@ async function tratar(e: Evento): Promise<boolean> {
   return false;
 }
 
-/** El secreto de la URL: el configurado, o uno derivado de SECRETS_KEY. */
-export function secretoEsperado(): string {
+/** El secreto de la URL: el configurado, o uno derivado de SECRETS_KEY.
+ *  NO se exporta: en un `route.ts` de Next sólo valen los exports de la ruta
+ *  (GET, POST, runtime, dynamic...) y cualquier otro rompe el build —cosa que
+ *  `tsc --noEmit` no ve y `next build` sí. */
+function secretoEsperado(): string {
   const fijo = process.env.BREVO_WEBHOOK_SECRET;
   if (fijo) return fijo;
   const llave = process.env.SECRETS_KEY;
