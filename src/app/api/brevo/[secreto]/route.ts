@@ -53,6 +53,49 @@ type Evento = {
   ts_event?: number;
 };
 
+/**
+ * `GET ?registrar=1` da de alta este webhook en Brevo, una sola vez.
+ *
+ * Lo hace la propia ruta y no un script porque `BREVO_API_KEY` vive en el
+ * entorno de producción y no en ningún `.env.local`: así la llave nunca sale
+ * del servidor ni pasa por una terminal. Sin el parámetro, el GET sólo dice si
+ * ya está registrado, que es lo que conviene poder mirar después.
+ */
+export async function GET(req: NextRequest, { params }: { params: Promise<{ secreto: string }> }) {
+  const { secreto } = await params;
+  const esperado = secretoEsperado();
+  if (!esperado || !igual(secreto, esperado)) {
+    return NextResponse.json({ error: "No existe" }, { status: 404 });
+  }
+  const key = process.env.BREVO_API_KEY;
+  if (!key) return NextResponse.json({ error: "Esta tienda no manda por Brevo" }, { status: 409 });
+
+  const H = { "api-key": key, "content-type": "application/json", accept: "application/json" };
+  const miUrl = new URL(req.url);
+  miUrl.search = "";
+  const url = miUrl.toString();
+
+  const lista = await fetch("https://api.brevo.com/v3/webhooks?type=transactional", { headers: H })
+    .then((r) => r.json() as Promise<{ webhooks?: { id: number; url: string }[] }>);
+  const ya = (lista.webhooks ?? []).find((w) => w.url === url);
+  if (ya) return NextResponse.json({ ok: true, yaEstaba: true, id: ya.id });
+  if (req.nextUrl.searchParams.get("registrar") !== "1") {
+    return NextResponse.json({ ok: true, registrado: false, otros: (lista.webhooks ?? []).length });
+  }
+
+  const r = await fetch("https://api.brevo.com/v3/webhooks", {
+    method: "POST", headers: H,
+    body: JSON.stringify({
+      type: "transactional", url,
+      description: "email_log: delivered, rechazos, aperturas y clics",
+      events: ["delivered", "hardBounce", "softBounce", "blocked", "spam", "invalid",
+               "error", "opened", "uniqueOpened", "click"],
+    }),
+  });
+  const cuerpo = await r.json().catch(() => ({}));
+  return NextResponse.json({ ok: r.ok, ...(cuerpo as object) }, { status: r.ok ? 200 : 502 });
+}
+
 export async function POST(req: NextRequest, { params }: { params: Promise<{ secreto: string }> }) {
   const { secreto } = await params;
   const esperado = secretoEsperado();
