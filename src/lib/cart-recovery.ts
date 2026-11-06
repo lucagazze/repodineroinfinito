@@ -20,6 +20,7 @@ import { adminEmails } from "./auth";
 import { DEFAULT_TEST_EMAIL } from "./test-purchase";
 import { isTestStore } from "./test-store";
 import { formatUntil, recoveryTexts } from "./cart-recovery-texts";
+import { vatOn, vatRate, withVat } from "@/lib/vat";
 
 /**
  * Carritos abandonados: a quien dejó el email en el checkout y no pagó, un
@@ -224,6 +225,8 @@ const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replac
 function renderHtml(a: {
   locale: Locale; brand: string; color: string; logo: string | null; copy: CopyT; cover: string | null; productName: string;
   lines: { name: string; was: string; now: string }[]; wasTotal: string; nowTotal: string; pct: number; bonuses: string[];
+  /** El impuesto que la pasarela suma, ya formateado, o null si no suma nada. */
+  vat: { label: string; amount: string } | null;
   until: string; url: string; unsubUrl: string; legal: string; support: string;
 }) {
   const t = recoveryTexts(a.locale);
@@ -253,6 +256,7 @@ ${a.bonuses.length ? `<tr><td style="padding:12px 0 0;font-family:${FONT}"><p st
 <tr><td style="padding:22px 0 0">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#f8fafc" style="border-radius:12px;border:1px solid ${LINE}">
 ${a.lines.length > 1 ? a.lines.map((l) => `<tr><td style="padding:10px 16px 0;font-family:${FONT};font-size:13.5px;color:${INK}">${esc(l.name)}</td><td align="right" style="padding:10px 16px 0;font-family:${FONT};font-size:13.5px;white-space:nowrap">${a.pct ? `<s style="color:#9ca3af">${esc(l.was)}</s> ` : ""}<b style="color:${INK}">${esc(l.now)}</b></td></tr>`).join("") : ""}
+${a.vat ? `<tr><td style="padding:10px 16px 0;font-family:${FONT};font-size:13.5px;color:${MUTED}">${esc(a.vat.label)}</td><td align="right" style="padding:10px 16px 0;font-family:${FONT};font-size:13.5px;white-space:nowrap;color:${INK}">${esc(a.vat.amount)}</td></tr>` : ""}
 ${a.pct ? `<tr><td style="padding:14px 16px 4px;font-family:${FONT};font-size:13px;color:${MUTED}">${esc(t.normalPrice)}</td><td align="right" style="padding:14px 16px 4px;font-family:${FONT};font-size:15px;color:#9ca3af"><s>${esc(a.wasTotal)}</s></td></tr>` : ""}
 <tr><td style="padding:${a.pct ? "0" : "14px"} 16px 14px;font-family:${FONT};font-size:14px;font-weight:700;color:${INK}">${esc(a.pct ? t.yourPrice(a.pct) : (T[a.locale] ?? T.en).ckTotal)}</td><td align="right" style="padding:${a.pct ? "0" : "14px"} 16px 14px;font-family:${FONT};font-size:22px;font-weight:800;color:${a.pct ? "#15803d" : INK}">${esc(a.nowTotal)}</td></tr>
 </table></td></tr>
@@ -345,7 +349,12 @@ export async function recoverCart(cartId: string, opts: { force?: boolean; previ
     logo: typeof logo === "string" && /^https:\/\//.test(logo) ? logo : null,
     copy: written.copy, cover: main.email_image_url ?? main.image_url, productName: main.name,
     lines: q1.lines.map((l, i) => ({ name: l.product.short_name || l.product.name, was: fmt(q0.lines[i]?.amount ?? l.amount), now: fmt(l.amount) })),
-    wasTotal: fmt(q0.total), nowTotal: fmt(q1.total), pct,
+    // Los totales van CON el impuesto que suma la pasarela: si el mail dice
+    // un numero y la tarjeta cobra otro, es la misma sorpresa del checkout.
+    wasTotal: fmt(withVat(q0.total, c.country)), nowTotal: fmt(withVat(q1.total, c.country)), pct,
+    vat: vatOn(q1.total, c.country) > 0
+      ? { label: (T[locale] ?? T.en).ckVat(Math.round(vatRate(c.country) * 100)), amount: fmt(vatOn(q1.total, c.country)) }
+      : null,
     bonuses: [...bonuses, ...included].map((p) => p.short_name || p.name),
     until, url, unsubUrl, legal: [legalOf(store as unknown as Store).name, legalOf(store as unknown as Store).address].filter(Boolean).join(", "),
     support: store.support_email,

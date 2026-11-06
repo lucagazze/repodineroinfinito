@@ -169,6 +169,8 @@ type Dict = {
   ckIncludesFree: string;
   ckFree: string;
   ckTotal: string;
+  /** Rotulo del impuesto que la pasarela suma (ver src/lib/vat.ts). */
+  ckVat: (pct: number) => string;
   ckSave: (x: string) => string;
   ckSecurePay: string;
   ckSoldBy: string;
@@ -286,6 +288,7 @@ export const T: Record<Locale, Dict> = {
     ckIncludesFree: "INCLUDE GRATIS",
     ckFree: "GRATIS",
     ckTotal: "Totale",
+    ckVat: (p) => `IVA (${p}%)`,
     ckSave: (x) => `Risparmi ${x}`,
     ckSecurePay: "Pagamento sicuro",
     ckSoldBy: "Venduto da",
@@ -384,6 +387,7 @@ export const T: Record<Locale, Dict> = {
     ckIncludesFree: "INCLUDES FREE",
     ckFree: "FREE",
     ckTotal: "Total",
+    ckVat: (p) => `VAT (${p}%)`,
     ckSave: (x) => `You save ${x}`,
     ckSecurePay: "Secure payment",
     ckSoldBy: "Sold by",
@@ -482,6 +486,7 @@ export const T: Record<Locale, Dict> = {
     ckIncludesFree: "INCLUYE GRATIS",
     ckFree: "GRATIS",
     ckTotal: "Precio total",
+    ckVat: (p) => `IVA (${p}%)`,
     ckSave: (x) => `Ahorras ${x}`,
     ckSecurePay: "Pago seguro",
     ckSoldBy: "Vendido por",
@@ -580,6 +585,7 @@ export const T: Record<Locale, Dict> = {
     ckIncludesFree: "INCLUI GRÁTIS",
     ckFree: "GRÁTIS",
     ckTotal: "Total",
+    ckVat: (p) => `IVA (${p}%)`,
     ckSave: (x) => `Você economiza ${x}`,
     ckSecurePay: "Pagamento seguro",
     ckSoldBy: "Vendido por",
@@ -675,6 +681,7 @@ export const T: Record<Locale, Dict> = {
     ckIncludesFree: "INCLUS GRATUITEMENT",
     ckFree: "GRATUIT",
     ckTotal: "Total",
+    ckVat: (p) => `TVA (${p} %)`,
     ckSave: (x) => `Tu économises ${x}`,
     ckSecurePay: "Paiement sécurisé",
     ckSoldBy: "Vendu par",
@@ -770,6 +777,7 @@ export const T: Record<Locale, Dict> = {
     ckIncludesFree: "GRATIS DABEI",
     ckFree: "GRATIS",
     ckTotal: "Gesamt",
+    ckVat: (p) => `MwSt. (${p}%)`,
     ckSave: (x) => `Du sparst ${x}`,
     ckSecurePay: "Sichere Zahlung",
     ckSoldBy: "Verkauft von",

@@ -12,6 +12,7 @@ import { Elements } from "@stripe/react-stripe-js";
 import { useMotorStripe } from "./motor-stripe";
 import { useMotorWhop, ProveedorWhop } from "./motor-whop";
 import type { CtxMotor, UsarMotor } from "./motores";
+import { vatOn, vatRate } from "@/lib/vat";
 import { T, money, type Locale } from "@/lib/i18n";
 import { toMinor } from "@/lib/minor";
 import { CHECKOUT_CSS } from "./checkout.css";
@@ -372,8 +373,17 @@ function CheckoutForm({
   const guaranteeDays = st.guarantee.days ?? p.guaranteeDays;
   const guaranteeImage = st.guarantee.image || p.guaranteeImage;
   const chosen = p.offers.filter((o) => bumps.includes(o.slug));
+  // `total` es lo que viaja a la pasarela y NO lleva impuesto: la pasarela se
+  // lo suma despues. `totalFinal` es lo que le van a cobrar a la tarjeta, y es
+  // el unico numero que tiene sentido mostrar. Ver src/lib/vat.ts.
+  const ivaPct = Math.round(vatRate(p.country) * 100);
+  const iva = vatOn(total, p.country);
+  const totalFinal = Math.round((total + iva) * 100) / 100;
   const compareTotal = p.baseCompareTotal + chosen.reduce((a, o) => a + (o.compareAt ?? o.amount), 0);
-  const saving = Math.max(compareTotal - total, 0);
+  // El tachado se compara contra el final, no contra el neto, o el «ahorras X»
+  // saldria de restar dos numeros de distinta naturaleza.
+  const compareFinal = Math.round((compareTotal + vatOn(compareTotal, p.country)) * 100) / 100;
+  const saving = Math.max(compareFinal - totalFinal, 0);
   const returnUrl = () => `${window.location.origin}/gracias`;
 
   // Tildar un bump es instantáneo: el total se recalcula acá y el formulario de
@@ -510,7 +520,7 @@ function CheckoutForm({
         <div className="o-pay">
           <button type="submit" className="ck-pay" disabled={busy || syncing || !motor.listo}>
             {busy || syncing ? <span className="ck-spin" /> : null}
-            {busy ? t.ckProcessing : st.payButton.text ? st.payButton.text.replace("{total}", fmt(total)) : t.ckPay(fmt(total))}
+            {busy ? t.ckProcessing : st.payButton.text ? st.payButton.text.replace("{total}", fmt(totalFinal)) : t.ckPay(fmt(totalFinal))}
           </button>
           {msg && <p className="ck-err" role="alert">{msg}</p>}
           {!d2 && st.guarantee.seals && (
@@ -602,7 +612,7 @@ function CheckoutForm({
         <section className="ck-sum o-sum" data-open={sumOpen}>
           <button type="button" className="ck-sumHead" onClick={() => setSumOpen((v) => !v)}>
             <span>{t.ckSummary}<IconChevron /></span>
-            <strong>{fmt(total)}</strong>
+            <strong>{fmt(totalFinal)}</strong>
           </button>
           <div className="ck-sumBody">
             <div className="ck-line">
@@ -645,12 +655,19 @@ function CheckoutForm({
               </>
             )}
 
+            {iva > 0 && (
+              <div className="ck-line">
+                <span>{t.ckVat(ivaPct)}</span>
+                <b>{fmt(iva)}</b>
+              </div>
+            )}
+
             <div className="ck-total">
               <div className="row">
                 <span>{t.ckTotal}</span>
-                {st.offer.showCompareAt && saving > 0 && <s>{fmt(compareTotal)}</s>}
+                {st.offer.showCompareAt && saving > 0 && <s>{fmt(compareFinal)}</s>}
               </div>
-              <p className="big">{fmt(total)}</p>
+              <p className="big">{fmt(totalFinal)}</p>
               {st.offer.showSavings && saving > 0 && <p className="save">{t.ckSave(fmt(saving))}</p>}
             </div>
           </div>
