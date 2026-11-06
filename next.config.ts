@@ -28,13 +28,32 @@ const config: NextConfig = {
   poweredByHeader: false,
   async rewrites() {
     return {
-      beforeFiles: landingDomains.length
+      beforeFiles: [
+        // APPLE PAY Y GOOGLE PAY EN EL CHECKOUT EMBEBIDO.
+        //
+        // Whop las ofrece solo en dominios que verifico, y la verificacion es
+        // servir ESTE archivo en NUESTRO dominio. No hace falta DNS. Un dominio
+        // con Apple Pay listo habilita las DOS billeteras para todos los
+        // elementos de esa pagina, asi que Google Pay viene de arriba.
+        //
+        // Va como rewrite y no como copia en public/ para que no se desactualice:
+        // si Whop rota el archivo, esto sigue sirviendo el vigente. La unica
+        // dependencia nueva es whop.com, de la que el checkout ya depende entera.
+        //
+        // Sirve para los dos dominios de tienda a la vez: el despliegue es uno.
+        // Comprobado el 6/11/2026: el origen devuelve 200, 228 bytes.
+        {
+          source: "/.well-known/apple-developer-merchantid-domain-association",
+          destination: "https://whop.com/.well-known/apple-platform-integrator/apple-developer-merchantid-domain-association",
+        },
+        ...(landingDomains.length
         ? [{
             source: "/:lang(en|it|es|pt|fr|de|pl|nl)",
             has: [{ type: "host" as const, value: `(?<sub>[a-z0-9-]+)\\.(?:${landingDomains.map(esc).join("|")})` }],
             destination: "/lp/:sub/:lang/index.html",
           }]
-        : [],
+        : []),
+      ],
       afterFiles: landingProxies.map((p) => ({ source: `/l/${p.alias}/:path*`, destination: `${p.url}/:path*` })),
       fallback: [],
     };
