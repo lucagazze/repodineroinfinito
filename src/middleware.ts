@@ -125,9 +125,13 @@ async function storeMap(): Promise<Maps> {
   return inflight;
 }
 
-/** Hosts propios de la app: nunca se reescriben ni se consulta la base. */
-function isAppHost(host: string): boolean {
-  if (!host || host === "localhost" || host === "127.0.0.1" || host === "[::1]" || host.endsWith(".vercel.app")) return true;
+/** Hosts que son de la app por naturaleza: nunca se reescriben ni se consulta la base. */
+function isIntrinsicAppHost(host: string): boolean {
+  return !host || host === "localhost" || host === "127.0.0.1" || host === "[::1]" || host.endsWith(".vercel.app");
+}
+
+/** La dirección pública declarada en las variables de entorno. */
+function isDeclaredAppHost(host: string): boolean {
   for (const v of [process.env.NEXT_PUBLIC_SITE_URL, process.env.PUBLIC_BASE_URL]) {
     if (v && norm(v) === host) return true;
   }
@@ -209,7 +213,7 @@ export async function middleware(req: NextRequest) {
       }
     }
   }
-  if (isAppHost(host)) return pass(req);
+  if (isIntrinsicAppHost(host)) return pass(req);
 
   let maps: Maps | undefined;
   try {
@@ -217,6 +221,15 @@ export async function middleware(req: NextRequest) {
   } catch {
     maps = undefined; // fail open
   }
+  // La dirección de NEXT_PUBLIC_SITE_URL / PUBLIC_BASE_URL manda, SALVO que ese
+  // mismo host esté registrado como dominio de una tienda: ahí gana la base.
+  // Si ganara la variable, este dominio no se reescribiría a /c/{tienda}/{embudo}
+  // y pasarían dos cosas a la vez: todos los checkouts de esa tienda darían 404
+  // y el panel quedaría servido en su dominio público. Medido el 6/11/2026: con
+  // PUBLIC_BASE_URL apuntando a pay.financestudylab.com, /kit daba 404 y /entrar
+  // abría la pantalla de acceso al panel. Si la base no responde, `maps` es
+  // undefined y vale la variable, como antes.
+  if (isDeclaredAppHost(host) && !maps?.hosts.get(host) && !maps?.offerHosts.get(host)) return pass(req);
   const path = req.nextUrl.pathname;
   const seg = path.split("/").filter(Boolean);
   const first = seg[0] ?? "";
