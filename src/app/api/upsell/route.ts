@@ -7,6 +7,7 @@ import { getRates, priceFor, toMinor } from "@/lib/fx";
 import { resolveChain } from "@/lib/postpurchase";
 import { orderChargeable, recordUpsell, aceptarUpsellDePrueba } from "@/lib/upsell";
 import { cobrarGuardada, conexionDe } from "@/lib/whop";
+import { orderRefColumn } from "@/lib/order-ref";
 
 export const runtime = "nodejs";
 
@@ -41,12 +42,17 @@ export async function POST(req: NextRequest) {
   }
 
   // La orden es la fuente de verdad, no el query string.
+  //
+  // La columna y el valor los resuelve `orderRefColumn`, la MISMA funcion que
+  // usa la pagina. Aca habia una copia de dos lineas que no le ponia el
+  // prefijo `whop:`, asi que con Whop no encontraba el pedido y contestaba
+  // 403: la oferta se veia y el cobro no salia nunca.
   const ref = String(sessionId);
-  const col = ref.startsWith("pi_") ? "stripe_payment_intent" : "stripe_session_id";
+  const { col, value: refValor } = orderRefColumn(ref);
   const { data: order } = await db
     .from("orders")
     .select("id,store_id,funnel_id,pp_funnel_id,provider,stripe_customer,currency,status,email,whop_member_id,whop_payment_method_id")
-    .eq(col, ref)
+    .eq(col, refValor)
     .maybeSingle();
 
   if (!order) return NextResponse.json({ error: "Pedido no válido" }, { status: 403 });

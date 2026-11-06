@@ -5,6 +5,13 @@ import { fromMinor } from "./fx";
 import { conexionDe, verPago } from "./whop";
 import { PREFIJO as WHOP, entregarPagoWhop, resolverPagoWhop } from "./whop-events";
 import { TEST_PREFIX } from "./test-purchase";
+import { orderRefColumn, WHOP_PREFIX, TEST_REF_PREFIX } from "./order-ref";
+
+// Seguro de compilacion: si alguno de los dos prefijos cambia en su modulo y
+// no en order-ref.ts, esto deja de compilar en vez de romper en silencio una
+// busqueda de pedidos.
+const _prefijosAlineados: [typeof WHOP_PREFIX, typeof TEST_REF_PREFIX] = [WHOP, TEST_PREFIX];
+void _prefijosAlineados;
 
 /**
  * Busca el pedido venga de donde venga.
@@ -105,10 +112,7 @@ async function lookup(ref: string) {
   // final decia «no encontramos tu pedido» con el pedido creado, las entregas
   // listas y el upsell ya registrado. Medido el 22/10/2026 sobre
   // test_DPFUxKJMpPvU: el recorrido entero funcionaba menos la ultima pagina.
-  const col = ref.startsWith("cs_") || ref.startsWith(TEST_PREFIX)
-    ? "stripe_session_id"
-    : "stripe_payment_intent";
-  const valor = esWhop(ref) ? WHOP + ref : ref;
+  const { col, value: valor } = orderRefColumn(ref);
   const { data, error } = await db
     .from("orders")
     .select("id,store_id,funnel_id,pp_funnel_id,provider,status,locale,currency,email,name")
