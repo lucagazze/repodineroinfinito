@@ -15,12 +15,13 @@ import { db } from "@/lib/db";
  */
 
 import type { PresaleRow, PresaleState, ReadyFile } from "./presale-shared";
+import { fileVerdict } from "./presale-shared";
 export { dueText, type PresaleRow, type PresaleState, type ReadyFile } from "./presale-shared";
 
 type P = {
   id: string; slug: string; short_name: string | null; name: string; image_url: string | null; store_id: string;
   presale: boolean | null; presale_days: number | null; presale_since: string | null; content_ready_at: string | null;
-  delivery_url: string | null; variant_of: string | null; includes: string[] | null; ready_files?: ReadyFile[] | null; leftover_notices?: { id: string; title: string }[] | null;
+  delivery_url: string | null; delivery_file?: string | null; variant_of: string | null; includes: string[] | null; ready_files?: ReadyFile[] | null; leftover_notices?: { id: string; title: string }[] | null;
   presale_pages?: number | null; presale_outline?: string | null;
 };
 
@@ -73,7 +74,7 @@ export async function presaleBoard(): Promise<PresaleRow[]> {
   // Los que están en preventa y los que se terminaron en los últimos 30 días (puede faltar avisar).
   const since30 = new Date(Date.now() - 30 * 24 * H).toISOString();
   const { data: own } = await db.from("products")
-    .select("id,slug,short_name,name,image_url,store_id,presale,presale_days,presale_since,content_ready_at,delivery_url,variant_of,includes,ready_files,leftover_notices,presale_pages,presale_outline")
+    .select("id,slug,short_name,name,image_url,store_id,presale,presale_days,presale_since,content_ready_at,delivery_url,delivery_file,variant_of,includes,ready_files,leftover_notices,presale_pages,presale_outline")
     .or(`presale.eq.true,content_ready_at.gte.${since30}`);
   const rows = (own ?? []) as P[];
   if (!rows.length) return [];
@@ -82,7 +83,7 @@ export async function presaleBoard(): Promise<PresaleRow[]> {
   const baseOf = (p: P) => p.variant_of ?? p.id;
   const baseIds = [...new Set(rows.map(baseOf))];
   const { data: fam } = await db.from("products")
-    .select("id,slug,short_name,name,image_url,store_id,presale,presale_days,presale_since,content_ready_at,delivery_url,variant_of,includes,ready_files,leftover_notices,presale_pages,presale_outline")
+    .select("id,slug,short_name,name,image_url,store_id,presale,presale_days,presale_since,content_ready_at,delivery_url,delivery_file,variant_of,includes,ready_files,leftover_notices,presale_pages,presale_outline")
     .or(`id.in.(${baseIds.join(",")}),variant_of.in.(${baseIds.join(",")})`);
   const family = (fam ?? []) as P[];
   const { data: packs } = await db.from("products").select("id,includes").overlaps("includes", family.map((p) => p.id));
@@ -147,7 +148,7 @@ export async function presaleBoard(): Promise<PresaleRow[]> {
     out.push({
       id, slug: base.slug, name: base.short_name || base.name, image: base.image_url,
       storeId: base.store_id, storeName: storeName.get(base.store_id) ?? "",
-      days, since: startedAt, readyAt, deliveryUrl: base.delivery_url,
+      days, since: startedAt, readyAt, deliveryUrl: base.delivery_url, deliveryFile: base.delivery_file ?? null,
       productIds, orders, pendingNotice, firstSale: firstSale ?? null, due, hoursLeft, state, offers: [], readyFiles, noticedAt,
       leftoverNotices: presale ? [] : ((mine.map((p) => p.leftover_notices).find((f) => Array.isArray(f) && f.length) ?? []) as { id: string; title: string }[]),
       plannedPages: mine.map((p) => p.presale_pages).find((x) => x != null) ?? null,
@@ -221,13 +222,45 @@ async function verifyPdf(id: string): Promise<{ ok: boolean; bytes: number | nul
 export type FolderCheck = { state: "ready" | "pending" | "unknown"; files: ReadyFile[]; why: string | null; notices: { id: string; title: string }[] };
 
 /**
+ * La otra forma de entregar: un archivo propio en Supabase Storage (products.delivery_file), sin
+ * carpeta de Drive. El peligro es otro que en Drive —la columna apunta a UN archivo, el que se baja
+ * el comprador, y no hay aviso de preventa al lado— asi que no hay nada que separar: hay que
+ * comprobar que ese archivo este de verdad, que sea del tipo que dice ser y que no sea un resto
+ * vacio. Que la columna no sea null no alcanza, que es lo que el panel daba por hecho.
+ *
+ * «pending» = se miro y no esta. «unknown» = no se pudo mirar (Storage no contesto): ahi no se
+ * toca nada, igual que cuando Drive no contesta.
+ */
+async function storageCheck(path: string): Promise<FolderCheck> {
+  const clean = decodeURIComponent(path);
+  const title = clean.split("/").pop() || clean;
+  const falta = (why: string): FolderCheck => ({ state: "pending", files: [], why, notices: [] });
+  try {
+    const { data } = await db.storage.from("entregas").createSignedUrl(clean, 60);
+    if (!data?.signedUrl) return falta(`«${title}» no esta en Storage (bucket entregas)`);
+    const r = await fetch(data.signedUrl, { headers: { Range: "bytes=0-1023" }, cache: "no-store", signal: AbortSignal.timeout(15_000) });
+    if (!r.ok && r.status !== 206) return falta(`«${title}» no se puede bajar de Storage (${r.status})`);
+    const head = Buffer.from(await r.arrayBuffer()).toString("latin1");
+    const total = Number(r.headers.get("content-range")?.split("/")[1] ?? r.headers.get("content-length") ?? NaN);
+    const bytes = Number.isFinite(total) ? total : null;
+    const v = fileVerdict(clean, head, bytes);
+    if (!v.ok) return falta(v.why!);
+    return { state: "ready", files: [{ id: clean, title, bytes }], why: null, notices: [] };
+  } catch (e) {
+    return { state: "unknown", files: [], why: `no se pudo leer Storage (${(e as Error).message})`, notices: [] };
+  }
+}
+
+/**
  * ¿Ya está el contenido? Listo = hay al menos un PDF verificado (un PDF de verdad, con peso de libro, que no
  * se llama como el aviso) y ninguna carpeta de adentro quedó solo con el aviso (en un pack, falta un libro).
  * Mira hasta 2 niveles. «unknown» si Drive no contestó o la carpeta no es pública. `why` dice qué falta.
  */
-export async function folderCheck(url: string | null): Promise<FolderCheck> {
+export async function folderCheck(url: string | null, file?: string | null): Promise<FolderCheck> {
   const id = url?.match(/folders\/([A-Za-z0-9_-]+)/)?.[1];
-  if (!id) return { state: "unknown", files: [], why: "la entrega no es una carpeta de Drive", notices: [] };
+  // Sin carpeta de Drive, la entrega puede ser un archivo propio en Storage. El camino de Drive,
+  // de aca para abajo, queda igual que siempre.
+  if (!id) return file ? storageCheck(file) : { state: "unknown", files: [], why: "la entrega no es una carpeta de Drive ni un archivo propio", notices: [] };
   const files: ReadyFile[] = [];
   // El aviso de preventa (un documento de Word, o lo que se llame como el aviso y no sea el libro).
   const notices: { id: string; title: string; parent: string }[] = [];
@@ -299,8 +332,8 @@ export const deliveryPdfs = (url: string | null) =>
   }, ["delivery-pdfs-v1", url ?? ""], { revalidate: 1800 })();
 
 /** Compatibilidad: solo el estado. */
-export async function folderReady(url: string | null): Promise<"ready" | "pending" | "unknown"> {
-  return (await folderCheck(url)).state;
+export async function folderReady(url: string | null, file?: string | null): Promise<"ready" | "pending" | "unknown"> {
+  return (await folderCheck(url, file)).state;
 }
 
 /** «Avisarme cuando un libro está hecho». Prendido salvo que lo apague. */
@@ -318,31 +351,39 @@ export async function setBookDoneAlert(on: boolean) {
  * de avisos; como mucho una vez cada 15 minutos (app_settings «presale_scan»), salvo `force`.
  */
 type Leftover = { id: string; name: string; storeId: string; files: { id: string; title: string }[] };
+
+/**
+ * Con que se guarda en la cache cada chequeo. Una carpeta de Drive la comparten varios productos
+ * (de ahi la cache), pero el archivo propio es de uno solo: si se guardara por `delivery_url`, los
+ * productos sin Drive caerian todos en la clave "" y se llevarian el resultado del primero.
+ */
+const checkKey = (p: { delivery_url: string | null; delivery_file: string | null }) =>
+  p.delivery_url ?? (p.delivery_file ? `file:${p.delivery_file}` : "");
 export async function scanPresaleFolders(force = false): Promise<{ ready: { id: string; name: string; storeId: string }[]; checked: number; skipped?: boolean; leftovers: Leftover[]; cleared: string[] }> {
   const { data: last } = await db.from("app_settings").select("value").eq("key", "presale_scan").maybeSingle();
   const at = Number((last?.value as { at?: number } | null)?.at ?? 0);
   if (!force && Date.now() - at < 15 * 60_000) return { ready: [], checked: 0, skipped: true, leftovers: [], cleared: [] };
   await db.from("app_settings").upsert({ key: "presale_scan", value: { at: Date.now() }, updated_at: new Date().toISOString() }, { onConflict: "key" });
 
-  const { data } = await db.from("products").select("id,short_name,name,store_id,delivery_url,variant_of").eq("presale", true);
-  const rows = (data ?? []) as { id: string; short_name: string | null; name: string; store_id: string; delivery_url: string | null; variant_of: string | null }[];
+  const { data } = await db.from("products").select("id,short_name,name,store_id,delivery_url,delivery_file,variant_of").eq("presale", true);
+  const rows = (data ?? []) as { id: string; short_name: string | null; name: string; store_id: string; delivery_url: string | null; delivery_file: string | null; variant_of: string | null }[];
   const byFolder = new Map<string, FolderCheck>();
   const ready: { id: string; name: string; storeId: string }[] = [];
   for (const p of rows) {
-    const key = p.delivery_url ?? "";
-    if (!byFolder.has(key)) byFolder.set(key, await folderCheck(p.delivery_url));
+    const key = checkKey(p);
+    if (!byFolder.has(key)) byFolder.set(key, await folderCheck(p.delivery_url, p.delivery_file));
     const chk = byFolder.get(key)!;
     if (chk.state !== "ready") continue;
     await db.from("products").update({ presale: false, content_ready_at: new Date().toISOString(), ready_files: chk.files, leftover_notices: chk.notices.length ? chk.notices : null }).eq("id", p.id);
     ready.push({ id: p.variant_of ?? p.id, name: p.short_name || p.name, storeId: p.store_id });
   }
   // Los que quedaron con el aviso de preventa al lado del libro: se vuelven a mirar hasta que alguien lo borre.
-  const { data: dirty } = await db.from("products").select("id,short_name,name,store_id,delivery_url,variant_of").eq("presale", false).not("leftover_notices", "is", null);
+  const { data: dirty } = await db.from("products").select("id,short_name,name,store_id,delivery_url,delivery_file,variant_of").eq("presale", false).not("leftover_notices", "is", null);
   const leftovers = new Map<string, Leftover>();
   const cleared = new Set<string>();
   for (const p of [...((dirty ?? []) as typeof rows), ...rows]) {
-    const key = p.delivery_url ?? "";
-    if (!byFolder.has(key)) byFolder.set(key, await folderCheck(p.delivery_url));
+    const key = checkKey(p);
+    if (!byFolder.has(key)) byFolder.set(key, await folderCheck(p.delivery_url, p.delivery_file));
     const chk = byFolder.get(key)!;
     if (chk.state === "unknown") continue;
     const base = p.variant_of ?? p.id;

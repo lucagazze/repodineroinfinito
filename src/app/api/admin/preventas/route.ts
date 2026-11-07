@@ -50,11 +50,16 @@ async function handle(req: NextRequest) {
   const { action, productId } = parsed.data;
 
   if (action === "ready") {
-    // Solo si se está seguro de que el libro está hecho: un PDF de verdad, con peso de libro, en su carpeta.
-    const { data: prod } = await db.from("products").select("delivery_url").eq("id", productId).maybeSingle();
-    const chk = await folderCheck((prod?.delivery_url as string | null) ?? null);
+    // Solo si se está seguro de que el libro está hecho: un PDF de verdad, con peso de libro, en su
+    // carpeta — o, si la tienda entrega con archivo propio, ese archivo de verdad en Storage.
+    const { data: prod } = await db.from("products").select("delivery_url,delivery_file").eq("id", productId).maybeSingle();
+    const chk = await folderCheck((prod?.delivery_url as string | null) ?? null, (prod?.delivery_file as string | null) ?? null);
     if (chk.state !== "ready") {
-      return NextResponse.json({ error: `Todavía no lo doy por hecho: ${chk.why ?? "no encontré el PDF del libro en su carpeta"}. Subí el PDF completo (con portada e índice) a la carpeta y volvé a tocar.` }, { status: 409, headers: NO_STORE });
+      // El consejo cambia segun como entregue el producto: a la carpeta de Drive, o al archivo propio.
+      const donde = prod?.delivery_file && !prod?.delivery_url
+        ? "Subí el archivo completo (con portada e índice) a Storage y volvé a tocar."
+        : "Subí el PDF completo (con portada e índice) a la carpeta y volvé a tocar.";
+      return NextResponse.json({ error: `Todavía no lo doy por hecho: ${chk.why ?? "no encontré el PDF del libro en su carpeta"}. ${donde}` }, { status: 409, headers: NO_STORE });
     }
     const { error } = await db.from("products").update({ presale: false, content_ready_at: new Date().toISOString(), ready_files: chk.files, leftover_notices: chk.notices.length ? chk.notices : null })
       .or(`id.eq.${productId},variant_of.eq.${productId}`);
@@ -69,7 +74,7 @@ async function handle(req: NextRequest) {
   if (!row) return NextResponse.json({ ok: true, sent: 0, failed: [] }, { headers: NO_STORE });
   if (row.state !== "listo_sin_avisar") return NextResponse.json({ error: "Primero marcalo listo: todavía está en preventa." }, { status: 409, headers: NO_STORE });
   // Antes de mandar el mail real, se vuelve a mirar la carpeta: que el libro siga ahí.
-  const again = await folderCheck(row.deliveryUrl);
+  const again = await folderCheck(row.deliveryUrl, row.deliveryFile);
   if (again.state !== "ready") return NextResponse.json({ error: `No mando el aviso: ${again.why ?? "no encontré el PDF del libro en su carpeta"}.` }, { status: 409, headers: NO_STORE });
   // Si en la carpeta quedó el documento de preventa («llega en 2 días») al lado del libro, el comprador vería los dos.
   await db.from("products").update({ leftover_notices: again.notices.length ? again.notices : null }).or(`id.eq.${productId},variant_of.eq.${productId}`);

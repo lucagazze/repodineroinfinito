@@ -14,6 +14,14 @@ const STATE: Record<PresaleState, { label: string; cls: string }> = {
   entregado: { label: "✓ Listo y avisado", cls: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300" },
 };
 const mb = (b: number | null) => (b == null ? "grande" : b >= 1e6 ? `${(b / 1e6).toLocaleString("es-AR", { maximumFractionDigits: 1 })} MB` : `${Math.round(b / 1000)} KB`);
+/**
+ * El link para abrir el archivo verificado. Solo lo hay cuando el archivo esta en Drive: un id de
+ * Drive no lleva barras ni puntos. Con archivo propio, `id` es la ruta en Storage («tienda/Libro
+ * .pdf») y armar con eso una URL de Drive daba un link roto; las filas viejas, escritas a mano,
+ * ni siquiera traen id. En esos casos se muestra el nombre sin link.
+ */
+const driveHref = (id: string | undefined | null) =>
+  id && /^[A-Za-z0-9_-]{10,}$/.test(id) ? `https://drive.google.com/file/d/${id}/view` : null;
 const day = (iso: string | null) => (iso ? new Date(iso).toLocaleString("es-AR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "America/Argentina/Buenos_Aires" }) : "—");
 
 async function post(body: unknown) {
@@ -29,7 +37,8 @@ export default function PresaleList({ rows, done }: { rows: PresaleRow[]; done?:
   const [msg, setMsg] = useState<Record<string, string>>({});
 
   const ready = async (r: PresaleRow) => {
-    if (!window.confirm(`¿Ya está el contenido de «${r.name}» en su carpeta?\n\nDeja de venderse como preventa: el comprador nuevo ya no ve «te llega en ${r.days} días».`)) return;
+    const donde = r.deliveryFile && !r.deliveryUrl ? "subido" : "en su carpeta";
+    if (!window.confirm(`¿Ya está el contenido de «${r.name}» ${donde}?\n\nDeja de venderse como preventa: el comprador nuevo ya no ve «te llega en ${r.days} días».`)) return;
     setBusy(r.id);
     try { await post({ action: "ready", productId: r.id }); router.refresh(); }
     catch (e) { window.alert((e as Error).message); }
@@ -37,7 +46,10 @@ export default function PresaleList({ rows, done }: { rows: PresaleRow[]; done?:
   };
   const notify = async (r: PresaleRow) => {
     const files = r.readyFiles.map((f) => `• ${f.title} (${mb(f.bytes)})`).join("\n");
-    if (!window.confirm(`¿Reenviar la entrega a ${r.pendingNotice} ${r.pendingNotice === 1 ? "comprador" : "compradores"} de «${r.name}»?\n\nEn la carpeta está:\n${files || "(se vuelve a verificar al mandar)"}\n\nLes llega el mail de entrega de su pedido con el link a la carpeta.`)) return;
+    const propio = !!r.deliveryFile && !r.deliveryUrl;
+    const donde = propio ? "Se les entrega" : "En la carpeta está";
+    const como = propio ? "Les llega el mail de entrega de su pedido, con el link de descarga." : "Les llega el mail de entrega de su pedido con el link a la carpeta.";
+    if (!window.confirm(`¿Reenviar la entrega a ${r.pendingNotice} ${r.pendingNotice === 1 ? "comprador" : "compradores"} de «${r.name}»?\n\n${donde}:\n${files || "(se vuelve a verificar al mandar)"}\n\n${como}`)) return;
     setBusy(r.id);
     try {
       const j = await post({ action: "notify", productId: r.id });
@@ -97,11 +109,15 @@ export default function PresaleList({ rows, done }: { rows: PresaleRow[]; done?:
               {/* El PDF que se verificó: para ver que es el libro antes de avisar. */}
               {r.readyFiles.length > 0 && (r.state === "listo_sin_avisar" || r.state === "entregado") && (
                 <p className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11.5px] text-zinc-500 dark:text-zinc-400">
-                  {r.readyFiles.map((f) => (
-                    <a key={f.id} href={`https://drive.google.com/file/d/${f.id}/view`} target="_blank" rel="noreferrer" className="font-semibold text-emerald-700 hover:underline dark:text-emerald-400">
-                      📄 {f.title} · {mb(f.bytes)}
-                    </a>
-                  ))}
+                  {r.readyFiles.map((f, i) => {
+                    const href = driveHref(f.id);
+                    const texto = `📄 ${f.title} · ${mb(f.bytes)}`;
+                    return href ? (
+                      <a key={f.id ?? i} href={href} target="_blank" rel="noreferrer" className="font-semibold text-emerald-700 hover:underline dark:text-emerald-400">{texto}</a>
+                    ) : (
+                      <span key={f.id ?? i} className="font-semibold text-emerald-700 dark:text-emerald-400">{texto}</span>
+                    );
+                  })}
                 </p>
               )}
               {r.leftoverNotices.length > 0 && (
