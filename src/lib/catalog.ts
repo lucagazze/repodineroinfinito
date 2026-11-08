@@ -129,9 +129,19 @@ export function phoneRequired(s: { gateway?: string | null }): boolean {
  * configurado; si no, la ruta /catalogo/{slug} en el dominio de la app.
  * Para linkear las páginas legales desde el checkout, los mails, etc.
  */
-export function catalogUrls(store: { slug: string; catalog_domain?: string | null }) {
+export function catalogUrls(store: { slug: string; catalog_domain?: string | null; domain?: string | null }) {
   const d = normHost(store.catalog_domain);
-  const root = d ? `https://${d}` : `${appBase()}/catalogo/${store.slug}`;
+  // Sin dominio de catalogo, la ruta larga /catalogo/{slug} anda en CUALQUIER
+  // host de la app -- menos en el dominio de OTRA tienda, donde el middleware
+  // la resuelve contra esa tienda y devuelve 404. appBase() es UNA direccion
+  // para todas las tiendas (hoy pay.financestudylab.com), asi que para Physics
+  // armaba URLs muertas: la politica de reembolso se citaba a si misma en un
+  // 404 y el auditor reportaba el catalogo caido y cinco paginas en 404. Por eso
+  // el dominio propio de la tienda va ANTES que appBase().
+  // Medido el 8/11/2026: /catalogo/physicsstudylab/refund-policy da 200 en
+  // pay.physicsstudylab.com y 404 en pay.financestudylab.com.
+  const own = normHost(store.domain);
+  const root = d ? `https://${d}` : `${own ? `https://${own}` : appBase()}/catalogo/${store.slug}`;
   return {
     home: d ? `${root}/` : root,
     terms: `${root}/terms`,
