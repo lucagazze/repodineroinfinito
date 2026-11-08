@@ -1,26 +1,49 @@
 import type { NextRequest } from "next/server";
+import { db } from "@/lib/db";
+import { bareHost, hostOf, originAllowed } from "@/lib/req-guard-shared";
 
 /**
  * Lo que comparten los endpoints públicos que reciben datos del navegador
- * (/api/rec): origen permitido, IP, robots y límite por IP en memoria.
+ * (/api/ev, /api/rec): origen permitido, IP, robots y límite por IP en memoria.
  */
 
-const hostOf = (u: string | null | undefined) => {
-  if (!u) return "";
-  try { return new URL(/^[a-z]+:\/\//i.test(u) ? u : `https://${u}`).host.toLowerCase(); } catch { return ""; }
-};
+export { hostOf };
 
-/** Mismo origen (landings y checkouts los sirve esta app, o un sitio que la tiene detrás) o un host propio. */
-export function originOk(req: NextRequest): boolean {
+// ------------------------------------------------ landings de otro dominio
+
+/**
+ * Las landings que pueden mandar eventos son las declaradas en los checkouts
+ * (funnels.landing_url), o sea las mismas que el panel muestra como landing de
+ * la oferta: se dan de alta y de baja con el checkout, sin variable de entorno
+ * que haya que acordarse de tocar al abrir una tienda. Se consulta sólo cuando
+ * el origen no es propio, así el checkout (que es casi todo el tráfico) no paga
+ * la consulta, y se recuerda 5 minutos.
+ */
+const TTL = 5 * 60_000;
+let landings: { at: number; hosts: Set<string> } | null = null;
+let loading: Promise<Set<string>> | null = null;
+
+async function landingHosts(): Promise<Set<string>> {
+  if (landings && Date.now() - landings.at < TTL) return landings.hosts;
+  loading ??= (async () => {
+    const { data } = await db.from("funnels").select("landing_url").not("landing_url", "is", null);
+    const hosts = new Set((data ?? []).map((f) => bareHost(hostOf(f.landing_url as string | null))).filter(Boolean));
+    // Si la base falla se sigue con la lista anterior (o vacía) y se reintenta en 30 s.
+    landings = data ? { at: Date.now(), hosts } : { at: Date.now() - TTL + 30_000, hosts: landings?.hosts ?? hosts };
+    return landings.hosts;
+  })().finally(() => { loading = null; });
+  return loading;
+}
+
+/** Mismo origen (landings y checkouts los sirve esta app), un host propio, o una landing declarada. */
+export async function originOk(req: NextRequest): Promise<boolean> {
   const origin = req.headers.get("origin");
-  if (!origin) return req.headers.get("sec-fetch-site") !== "cross-site";
-  const o = hostOf(origin);
-  if (!o) return false;
   const own = [req.headers.get("host"), req.headers.get("x-forwarded-host"), process.env.NEXT_PUBLIC_SITE_URL, process.env.PUBLIC_BASE_URL, process.env.PANEL_HOST]
     .map(hostOf).filter(Boolean);
-  if (own.includes(o)) return true;
-  const bare = o.replace(/:\d+$/, "");
-  return bare === "localhost" || bare === "127.0.0.1" || bare.endsWith(".vercel.app");
+  const ctx = { own, crossSite: req.headers.get("sec-fetch-site") === "cross-site", landings: new Set<string>() };
+  if (originAllowed(origin, ctx)) return true;
+  if (!origin) return false;
+  return originAllowed(origin, { ...ctx, landings: await landingHosts() });
 }
 
 export const clientIp = (req: NextRequest) =>

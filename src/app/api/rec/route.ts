@@ -99,7 +99,7 @@ async function dayBytes() {
 export async function GET(req: NextRequest) {
   const no = () => NextResponse.json({ on: false }, { headers: { "cache-control": "no-store" } });
   try {
-    if (!originOk(req) || isBot(req)) return no();
+    if (!(await originOk(req)) || isBot(req)) return no();
     const q = req.nextUrl.searchParams;
     const [{ funnel, storeId }, used] = await Promise.all([where(q), dayBytes()]);
     if (funnel && !funnel.on) return no();
@@ -114,7 +114,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    if (!originOk(req)) return empty(403);
+    if (!(await originOk(req))) return empty(403);
     if (isBot(req)) return empty(204); // a un robot no se le avisa nada
     if (!allow(clientIp(req))) return empty(429);
     const q = req.nextUrl.searchParams;

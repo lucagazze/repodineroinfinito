@@ -1,7 +1,11 @@
 /* Seguimiento: view, heartbeat (20s a la vista), cta_click y leave a /api/ev. Checkout en otro dominio: ?vid=&sid=
-   Clarity de la landing: identify(visitor_id) + tags vid/step, para encontrar la grabación desde el panel. */
+   Clarity de la landing: identify(visitor_id) + tags vid/step, para encontrar la grabación desde el panel.
+   data-api: a dónde van los eventos. Vacío = esta misma página (landings y checkouts que sirve la app).
+   Una landing estática vive en su propio dominio (www.lamarca.com) y la app en otro (pay.lamarca.com):
+   ahí hay que ponerlo, o los eventos se mandan a un /api/ev que en ese dominio no existe. El origen lo
+   acepta la app porque la landing está declarada en el checkout (funnels.landing_url). */
 (function(W,D,L,N){
-var s=D.currentScript||D.querySelector('script[src$="/t.js"]'),d=(s&&s.dataset)||{};
+var s=D.currentScript||D.querySelector('script[src$="/t.js"]'),d=(s&&s.dataset)||{},A=(d.api||"").replace(/\/+$/,"");
 function r(){return Math.random().toString(36).slice(2,10)+Date.now().toString(36)}
 function id(n,k){try{var st=W[n],v=st.getItem(k);if(!v)st.setItem(k,v=r());return v}catch(e){return r()}}
 var vid=id("localStorage","algd_vid"),sid=id("sessionStorage","algd_sid"),pv=r(),t0=Date.now(),last=0,gone=0,utm={},n=0;
@@ -20,8 +24,8 @@ function send(ev,data){
   var dd=data||{};dd.hv=1;if(hum)dd.h=1;b.data=dd;
   if(N.webdriver)b.wd=1;
   var j=JSON.stringify(b);
-  try{if(N.sendBeacon&&N.sendBeacon("/api/ev",j))return}catch(e){}
-  try{fetch("/api/ev",{method:"POST",body:j,keepalive:true})["catch"](function(){})}catch(e){}
+  try{if(N.sendBeacon&&N.sendBeacon(A+"/api/ev",j))return}catch(e){}
+  try{fetch(A+"/api/ev",{method:"POST",body:j,keepalive:true})["catch"](function(){})}catch(e){}
 }
 function beat(ev){last=Date.now();gone=0;send(ev)}
 beat("view");
@@ -40,7 +44,7 @@ function rec(){try{
   if(N.webdriver||/bot\b|bot\/|crawler|spider|HeadlessChrome|headless|Lighthouse|Playwright|Puppeteer/i.test(N.userAgent))return;
   var q=new URLSearchParams(L.search);if(q.get("preview")=="1"||q.has("norec"))return;
   var w=(d.store?"&store="+encodeURIComponent(d.store):"")+(d.funnel?"&funnel="+encodeURIComponent(d.funnel):"");
-  fetch("/api/rec?c=1"+w,{cache:"no-store"}).then(function(x){return x.ok?x.json():null}).then(function(c){
+  fetch(A+"/api/rec?c=1"+w,{cache:"no-store"}).then(function(x){return x.ok?x.json():null}).then(function(c){
     if(!c||!c.on)return;
     /* import() dentro de Function: un navegador viejo no lo entiende y no tiene que romper este archivo */
     return new Function("u","return import(u)")("https://cdn.jsdelivr.net/npm/@rrweb/record@2.1.7/+esm").then(function(m){start(m.record,w)});
@@ -49,7 +53,7 @@ function rec(){try{
 function start(record,w){
   var buf=[],seq=0,stop,iv,E=/[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/g;
   function end(){try{stop&&stop()}catch(e){}clearInterval(iv);buf=[]}
-  function url(z){return "/api/rec?s="+sid+"&v="+vid+"&p="+pv+"&q="+(seq++)+"&pg=landing&z="+z+"&path="+encodeURIComponent(L.pathname.slice(0,200))+w}
+  function url(z){return A+"/api/rec?s="+sid+"&v="+vid+"&p="+pv+"&q="+(seq++)+"&pg=landing&z="+z+"&path="+encodeURIComponent(L.pathname.slice(0,200))+w}
   function chk(x){if(x&&(x.status==409||x.status==403))end()}
   function flush(fin){
     if(!buf.length)return;var j=JSON.stringify(buf);buf=[];

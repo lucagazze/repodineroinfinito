@@ -6,6 +6,7 @@ import { botReason } from "@/lib/bots";
 import { PANEL_TZ } from "@/lib/admin/range";
 import { dayOf, startOfDay } from "@/lib/admin/tz";
 import { isTestStore } from "@/lib/test-store";
+import { hostOf, originOk } from "@/lib/req-guard";
 
 export const runtime = "nodejs";
 
@@ -66,26 +67,6 @@ function allow(ip: string): boolean {
     for (const [k, v] of buckets) if (now - v.at > 120_000) buckets.delete(k);
   }
   return true;
-}
-
-// ------------------------------------------------------ origen permitido
-
-const hostOf = (u: string | null | undefined) => {
-  if (!u) return "";
-  try { return new URL(/^[a-z]+:\/\//i.test(u) ? u : `https://${u}`).host.toLowerCase(); } catch { return ""; }
-};
-
-/** Mismo origen (landings y checkouts los sirve esta app) o un host propio de la app. */
-function originOk(req: NextRequest): boolean {
-  const origin = req.headers.get("origin");
-  if (!origin) return req.headers.get("sec-fetch-site") !== "cross-site";
-  const o = hostOf(origin);
-  if (!o) return false;
-  const own = [req.headers.get("host"), req.headers.get("x-forwarded-host"), process.env.NEXT_PUBLIC_SITE_URL, process.env.PUBLIC_BASE_URL, process.env.PANEL_HOST]
-    .map(hostOf).filter(Boolean);
-  if (own.includes(o)) return true;
-  const bare = o.replace(/:\d+$/, "");
-  return bare === "localhost" || bare === "127.0.0.1" || bare.endsWith(".vercel.app");
 }
 
 // ------------------------------------------------- slugs e ids (con caché)
@@ -177,7 +158,7 @@ const empty = (status = 204) => new NextResponse(null, { status, headers: { "cac
 
 export async function POST(req: NextRequest) {
   try {
-    if (!originOk(req)) return empty(403);
+    if (!(await originOk(req))) return empty(403);
     if (Number(req.headers.get("content-length") ?? 0) > MAX) return empty(413);
     const text = await req.text();
     if (Buffer.byteLength(text) > MAX) return empty(413);
