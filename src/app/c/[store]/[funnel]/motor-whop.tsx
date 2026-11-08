@@ -134,9 +134,27 @@ export function useMotorWhop(c: CtxMotor): Motor {
         });
         // Si redirigio, el navegador ya se fue: no hay que soltar el boton.
         if (r?.redirected) return true;
-        if (r?.lastPaymentError) {
-          logEvent("checkout", "pay_error", { stage: "confirm", via: "whop" });
-          setMsg(t.ckPayNotDone);
+        const err = r?.lastPaymentError;
+        if (err) {
+          /*
+            EL MOTIVO QUE DA LA PASARELA SE GUARDA Y SE MUESTRA, como en el
+            motor de Stripe (que registra code, decline y type, y muestra
+            error.message). Aca no se registraba nada: el panel escribia
+            «motivo desconocido» y el comprador leia un «no se pudo cobrar»
+            que no le dice que corregir.
+
+            Lo que costo: el 6/11/2026, en maths-illustrated, un comprador
+            britanico cargo mal el numero de tarjeta. Whop lo dijo con estas
+            palabras -- «The card number is incorrect. Please double-check the
+            16-digit number on your card and try again.» -- y nadie las vio.
+            Se fue sin comprar y el panel no supo por que.
+          */
+          logEvent("checkout", "pay_error", {
+            stage: "confirm", via: "whop",
+            code: err.code ?? null, decline: err.decline_code ?? null,
+            message: (err.message ?? "").slice(0, 160),
+          });
+          setMsg(err.message || t.ckPayNotDone);
           return false;
         }
         if (r?.status) res.status = r.status;
@@ -151,7 +169,26 @@ export function useMotorWhop(c: CtxMotor): Motor {
     const ok = ["paid", "succeeded", "processing", "pending", "open"].includes(String(res.status));
     if (!ok) {
       logEvent("checkout", "pay_error", { stage: "status", code: String(res.status ?? "?"), via: "whop" });
-      setMsg(t.ckPayNotDone);
+      /*
+        CERRAR LA VERIFICACION DEL BANCO NO ES UNA TARJETA RECHAZADA.
+        Los tipos del SDK lo dicen de la ventana que abre handleNextAction:
+        «Dismissing the dialog returns the payment's current status, which can
+        remain pending». O sea que `requires_action` aca significa que el
+        comprador cerro la verificacion o la dejo vencer, con la tarjeta
+        perfectamente buena. Decirle «no se pudo cobrar» lo manda a cambiar de
+        tarjeta cuando lo que le falta es aprobar la verificacion.
+
+        Medido el 4/11/2026 en maths-illustrated (GB, telefono, navegador de
+        Facebook): dos intentos asi, los dos con la verificacion vencida
+        --«The 3D Secure verification timed out because no response was
+        received»-- y el mismo cartel generico las dos veces. £13,99 perdidas
+        con la tarjeta sana.
+
+        El texto correcto ya existe en los 12 idiomas y dice que toque Pagar de
+        nuevo. Eso recien funciona con la clave de idempotencia por intento
+        (lib/whop-idem.ts): antes, tocar Pagar de nuevo daba un 400.
+      */
+      setMsg(String(res.status) === "requires_action" ? t.ckAuthRequired : t.ckPayNotDone);
       return false;
     }
 

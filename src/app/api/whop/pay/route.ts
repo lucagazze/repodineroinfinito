@@ -8,7 +8,8 @@ import { getPrevRates, getRates } from "@/lib/fx";
 import { pickLocale, type Locale } from "@/lib/i18n";
 import { currencyFrom, quoteFrom } from "@/lib/pricing";
 import { trackingFrom } from "@/lib/meta";
-import { conexionDe, cobrarConToken } from "@/lib/whop";
+import { conexionDe, cobrarConToken, verPago } from "@/lib/whop";
+import { claveIdem } from "@/lib/whop-idem";
 import { revisarDuplicado, textoDuplicado } from "@/lib/ya-lo-tiene";
 
 export const runtime = "nodejs";
@@ -128,6 +129,34 @@ export async function POST(req: NextRequest) {
   const origen = req.headers.get("origin") ?? process.env.PUBLIC_BASE_URL ?? "";
   const returnUrl = `${origen}/gracias?store=${encodeURIComponent(storeSlug)}&funnel=${encodeURIComponent(funnelSlug)}`;
 
+  // UN COBRO YA EN CURSO NO SE REPITE.
+  //   Hasta el 8/11/2026 lo único que frenaba el cobro doble era una clave de
+  //   idempotencia fija por checkout, y esa clave también mataba el reintento
+  //   legítimo (ver lib/whop-idem.ts). La clave pasa a ser por intento, y el
+  //   doble cobro lo frena esto: si la fila ya tiene un pago y ese pago está
+  //   cobrado, se devuelve ese y no se cobra de nuevo.
+  if (checkoutId) {
+    const { data: fila } = await db.from("checkouts")
+      .select("stripe_payment_intent").eq("id", checkoutId).maybeSingle();
+    const ref = String(fila?.stripe_payment_intent ?? "");
+    if (ref.startsWith("whop:")) {
+      try {
+        const antes = await verPago(conn.apiKey, ref.slice(5));
+        if (antes.status === "paid" || antes.status === "succeeded") {
+          console.warn("[whop/pay] el checkout ya estaba cobrado", checkoutId, antes.id);
+          return NextResponse.json({
+            id: antes.id, status: antes.status, clientSecret: null, nextAction: null,
+            total: q.total, currency: q.currency,
+          });
+        }
+      } catch (e) {
+        // Si no se puede leer el pago anterior, no se frena la compra: la
+        // defensa de arriba es un extra, no el camino principal.
+        console.warn("[whop/pay] no se pudo leer el pago anterior", checkoutId, (e as Error).message);
+      }
+    }
+  }
+
   try {
     const pago = await cobrarConToken(conn.apiKey, {
       accountId: conn.companyId,
@@ -144,8 +173,9 @@ export async function POST(req: NextRequest) {
       // upsell que se arme despues: la tarjeta no se puede pedir en diferido.
       setupFutureUsage: "off_session",
       metadata,
-      // Reintentar el mismo checkout no cobra dos veces.
-      idempotencyKey: checkoutId ? `co_${checkoutId}` : undefined,
+      // Mismo pedido repetido = mismo cobro; intento nuevo = cobro nuevo.
+      // La clave va atada al token de un solo uso: ver lib/whop-idem.ts.
+      idempotencyKey: claveIdem({ checkoutId, confirmationToken: token, amountCents: q.totalCents, currency: q.currency }),
       descripcion: `${brandFor(tienda, locale)} — ${q.lines[0].product.short_name}`,
     });
 
