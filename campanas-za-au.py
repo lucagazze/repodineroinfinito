@@ -67,7 +67,19 @@ import urllib.error, urllib.parse, urllib.request
 
 RAIZ, GRAPH = pathlib.Path(__file__).parent, "v21.0"
 ACT = "act_4624146111239384"
-PIXEL = "4633079520296335"
+# EL PIXEL VA POR CAMPANIA, NO UNO PARA TODAS, y esto costo rehacer un
+# conjunto. Maths tiene pixel propio desde el 2/11 (`1145294078008097`) y es
+# el unico colgado del embudo `maths-illustrated` en la tabla `pixels`. Con el
+# pixel de Fisica, el conjunto optimiza OFFSITE_CONVERSIONS esperando compras
+# en un pixel al que el checkout de Maths no le manda ninguna: no aprende y
+# entrega a ciegas.
+#
+# Y NO SE PUEDE CORREGIR DESPUES. Un PATCH al `promoted_object` rebota aunque
+# el conjunto este PAUSADO y nunca haya entregado: «No es posible editar el
+# pixel [...] una vez que se han publicado. [...] crea uno nuevo.» Publicado
+# no es entregado: basta con que exista. El pixel se elige UNA vez.
+PIXEL_PHYSICS = "4633079520296335"   # Physics, compartido con Finance
+PIXEL_MATHS = "1145294078008097"     # Maths Study Lab, embudo maths-illustrated
 PAGINA = "1286877647842413"
 IG = "17841437509345305"
 VIDEOS_DIR = RAIZ.parent / "physicstudylab-videos/out"
@@ -117,7 +129,7 @@ CUERPO_FISICA_ZA = CUERPO_FISICA.replace(
 
 PLAN = [
     dict(clave="za-maths", nombre="ZA | CBO | Maths Illustrated | 2026-11",
-         paises=["ZA"], presupuesto=15, edad=(16, 30),
+         paises=["ZA"], presupuesto=15, edad=(16, 30), pixel=PIXEL_MATHS,
          video=VIDEOS_DIR / "maths-4-za.mp4",
          destino="https://www.physicsstudylab.com/maths",
          pie="R299.99 · instant PDF · 30-day guarantee",
@@ -127,7 +139,7 @@ PLAN = [
                     "95 pages of maths you can look at 📐"]),
 
     dict(clave="au-fisica", nombre="AU | CBO | Physics Study Lab | 2026-11",
-         paises=["AU"], presupuesto=15, edad=(16, 30),
+         paises=["AU"], presupuesto=15, edad=(16, 30), pixel=PIXEL_PHYSICS,
          video=VIDEOS_DIR / "physics-kit-ad-au.mp4",
          destino="https://www.physicsstudylab.com/",
          pie="Instant PDF · 2 bonuses · 30-day guarantee",
@@ -315,7 +327,7 @@ def crear(plan, ensayo=True):
                 {"event_type": "CLICK_THROUGH", "window_days": 7},
                 {"event_type": "VIEW_THROUGH", "window_days": 1}]),
             "promoted_object": json.dumps({
-                "pixel_id": PIXEL, "custom_event_type": "PURCHASE"}),
+                "pixel_id": plan["pixel"], "custom_event_type": "PURCHASE"}),
             "targeting": json.dumps({
                 "geo_locations": {"countries": plan["paises"]},
                 "age_min": plan["edad"][0], "age_max": plan["edad"][1],
