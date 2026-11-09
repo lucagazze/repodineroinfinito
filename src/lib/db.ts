@@ -69,6 +69,12 @@ export type Product = {
   /** JPG liviano para email: Outlook no muestra WebP. */
   email_image_url: string | null;
   sort_order: number;
+  /** Plan de Whop con el que se cobra. Sin el, una oferta post-compra no puede
+   *  cobrarse: /api/upsell contesta «not_available» y el comprador se va. */
+  whop_plan_id?: string | null;
+  /** Plan de fundador: mismo producto, precio de lanzamiento, hasta la fecha. */
+  whop_founder_plan_id?: string | null;
+  founder_cutoff?: string | null;
   product_prices: Price[];
 };
 
@@ -135,8 +141,19 @@ export type Funnel = {
   funnel_items: FunnelItem[];
 };
 
-const PRODUCT_COLS =
+export const PRODUCT_COLS =
   "id,slug,name,short_name,description,kind,delivery_url,delivery_file,delivery_file_name,delivery_links,includes,variant_of,book_count,is_library,presale,presale_days,subscription,image_url,email_image_url,sort_order," +
+  // whop_plan_id VA EN LA LISTA, y por eso esta aparte con su razon.
+  //
+  // El cobro de una oferta post-compra con Whop necesita el plan del producto.
+  // Al no pedirse aqui, `getProductById` lo devolvia undefined y
+  // /api/upsell cortaba con «not_available» ANTES de cobrar. Resultado: el
+  // post-pago no cobro nunca, ni una vez, desde que la tienda vende por la
+  // app. Lo tapaba un `as unknown as { whop_plan_id }` en la ruta, que le
+  // quitaba al compilador la unica forma de avisar.
+  // Medido el 09/11/2026: pedido #27 dijo que SI a Maths Solved (19,99 GBP)
+  // a las 06:55 y se fue sin poder pagar.
+  "whop_plan_id,whop_founder_plan_id,founder_cutoff," +
   "product_prices(currency,amount,compare_at,display_value,stripe_price_id)";
 
 // --------------------------------------------------------------- consultas

@@ -328,7 +328,10 @@ async function cobrarConWhop(
 
   const product = await getProductById(offered.id);
   if (!product) return NextResponse.json({ error: "Oferta sin producto" }, { status: 500 });
-  const plan = (product as unknown as { whop_plan_id?: string | null }).whop_plan_id;
+  // Sin cast: el tipo Product declara whop_plan_id, asi que si algun dia se
+  // cae de PRODUCT_COLS el compilador lo dice. El cast que habia aqui le quito
+  // esa posibilidad y el post-pago estuvo sin cobrar desde el 23/10/2026.
+  const plan = product.whop_plan_id;
   if (!plan) {
     console.error("[upsell whop] producto sin whop_plan_id:", product.slug);
     return NextResponse.json({ reason: "not_available" }, { status: 409 });
