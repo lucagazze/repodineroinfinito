@@ -112,6 +112,94 @@ def mostrar():
     return lib
 
 
+def crear_plan():
+    """El plan de Whop del escalon nuevo. En LIBRAS, y la razon no es menor.
+
+    LA API SI CREA PLANES: `planes-upsell.py` lo viene haciendo desde el
+    22/10/2026 y los 8 escalones que hay salieron de ahi. Este reusa el mismo
+    cuerpo, con UN cambio.
+
+    EL CAMBIO: `planes-upsell.py` tiene `"currency": "usd"` escrito fijo, de
+    cuando USD era la unica moneda del catalogo. Hoy hay tres, y el cobro con
+    tarjeta guardada NO lleva importe: `cobrarGuardada` manda solo `plan_id`,
+    asi que **manda la moneda del plan, no la de la pagina**. Medido el
+    10/11/2026 sobre `plan_tuQMB1m1sQs8Z` (maths-solved): el plan dice USD
+    25,99 y la pagina de la oferta le muestra GBP 19,99 a un britanico y
+    ZAR 439,99 a un sudafricano, porque usa `priceFor(product, order.currency)`.
+
+    POR QUE LIBRAS PARA ESTE. Entre equivocarse para arriba y para abajo, se
+    elige para abajo: nadie puede pagar MAS de lo que vio.
+        plan en GBP 59,99  -> al britanico se le cobra exactamente lo que vio;
+                              al sudafricano, menos que los R 1.299,99 que vio.
+        plan en USD 77,00  -> al sudafricano se le cobraria mas que lo que vio.
+    Perder unos pesos es un problema nuestro; cobrar de mas es del comprador.
+
+    LO QUE ESTO NO ARREGLA, y hay que decirlo: los 8 escalones que ya existen
+    siguen en USD. El arreglo de fondo es un plan por moneda y que la ruta
+    elija por `order.currency`; eso toca el camino de cobro en vivo y lo
+    decide Bruno.
+    """
+    p = sb("GET", f"products?id=eq.{LIB}&select=slug,name,short_name,whop_plan_id")[0]
+    if p["whop_plan_id"]:
+        sys.exit(f"  ya tiene plan: {p['whop_plan_id']}")
+    precio = float(sb("GET", f"product_prices?product_id=eq.{LIB}"
+                             "&currency=eq.GBP&select=amount")[0]["amount"])
+
+    tienda = sb("GET", "stores?slug=eq.physicsstudylab&select=id")[0]["id"]
+    conn = sb("GET", f"store_whop?store_id=eq.{tienda}&select=api_key_enc")[0]
+    llave = mod.descifrar(conn["api_key_enc"])
+
+    # El producto de Whop bajo el que cuelgan todos nuestros planes: se lee de
+    # un plan que ya cobra, en vez de escribirlo fijo.
+    modelo = sb("GET", "products?whop_plan_id=not.is.null&select=whop_plan_id"
+                       f"&store_id=eq.{tienda}&limit=1")[0]["whop_plan_id"]
+    est, d = whop(llave, "GET", f"/plans/{modelo}")
+    if est >= 300:
+        sys.exit(f"  no pude leer el plan modelo {modelo}: {d}")
+    prod_whop = d["product"]["id"]
+    print(f"  producto de Whop: {prod_whop} ({d['product'].get('title')})")
+    print(f"  creando plan one_time · GBP {precio:.2f} · oculto")
+
+    est, nuevo = whop(llave, "POST", "/plans", {
+        "product_id": prod_whop,
+        "plan_type": "one_time",
+        "release_method": "buy_now",
+        "currency": "gbp",
+        "initial_price": precio,
+        "visibility": "hidden",          # solo se vende desde el post-pago
+        "unlimited_stock": True,
+        "description": p["short_name"] or p["name"],
+        "metadata": {"tienda": "physicsstudylab", "producto": p["slug"], "kind": "upsell"},
+    })
+    if est >= 300:
+        sys.exit(f"  Whop contesto {est}: {json.dumps(nuevo, ensure_ascii=False)[:500]}\n"
+                 "  No se toco la base.")
+    sb("PATCH", f"products?id=eq.{LIB}", {"whop_plan_id": nuevo["id"]})
+    # Comprobacion: que la base apunta y que el plan cobra lo que debe.
+    est2, leido = whop(llave, "GET", f"/plans/{nuevo['id']}")
+    guardado = sb("GET", f"products?id=eq.{LIB}&select=whop_plan_id")[0]["whop_plan_id"]
+    print(f"\n  plan      {nuevo['id']}")
+    print(f"  cobra     {leido.get('formatted_price')}  ({leido.get('currency')})")
+    print(f"  enlazado  {'si' if guardado == nuevo['id'] else 'NO'}")
+    print("\n  EL PRODUCTO SIGUE DESACTIVADO. Para prenderlo:")
+    print("      python3 escalon-premium.py --activar\n")
+
+
+def whop(llave, metodo, ruta, cuerpo=None):
+    import urllib.error, urllib.request
+    req = urllib.request.Request(
+        "https://api.whop.com/api/v1" + ruta, method=metodo,
+        data=json.dumps(cuerpo).encode() if cuerpo is not None else None,
+        headers={"authorization": f"Bearer {llave}", "content-type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=60) as r:
+            return r.status, json.loads(r.read().decode() or "null")
+    except urllib.error.HTTPError as e:
+        texto = e.read().decode(errors="replace")
+        try: return e.code, json.loads(texto)
+        except Exception: return e.code, texto[:500]
+
+
 def activar():
     lib = sb("GET", f"products?id=eq.{LIB}&select=slug,active,whop_plan_id")[0]
     if not lib["whop_plan_id"]:
@@ -166,10 +254,13 @@ def revertir():
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
+    ap.add_argument("--crear-plan", action="store_true",
+                    help="crea en Whop el plan del escalon (en libras)")
     ap.add_argument("--activar", action="store_true")
     ap.add_argument("--revertir", action="store_true")
     a = ap.parse_args()
-    if a.activar: activar()
+    if getattr(a, "crear_plan"): crear_plan()
+    elif a.activar: activar()
     elif a.revertir: revertir()
     else:
         mostrar()
