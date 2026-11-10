@@ -213,8 +213,18 @@ def activar():
   Para destrabarlo: crear en Whop una variante de pago unico por GBP 59,99 y
   guardar su id en `products.whop_plan_id` del producto the-whole-library.
 """)
-    # 1. el producto entra en juego
-    sb("PATCH", f"products?id=eq.{LIB}", {"active": True})
+    # 1. el producto entra en juego, Y SE MARCA COMO BIBLIOTECA.
+    #
+    # `is_library` NO es una etiqueta: es la unica razon por la que este paso
+    # se le puede ofrecer a alguien. `eligible()` usa `overlapsOwned` para un
+    # producto normal -- se saltea si el comprador ya tiene CUALQUIERA de las
+    # cosas que trae-- y este pack incluye `maths-illustrated`, que es
+    # justamente lo que acaba de comprar todo el que llega a esta escalera.
+    # Sin la marca, el escalon de 59,99 no se le mostraria JAMAS a nadie, y el
+    # sintoma seria silencio: la cadena simplemente salta al nivel 3.
+    # Con la marca, la regla pasa a ser `ownsProduct`: se saltea solo si ya
+    # tiene el pack entero.
+    sb("PATCH", f"products?id=eq.{LIB}", {"active": True, "is_library": True})
     # 2. el escalon nuevo toma el nivel 2
     pasos = sb("GET", f"pp_steps?pp_funnel_id=eq.{ESCALERA}&select=id,product_id,kind")
     fb = next(p for p in pasos if p["product_id"] == FINAL_BOOK)
