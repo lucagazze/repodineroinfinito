@@ -13,7 +13,7 @@
     "check:links": "node --experimental-strip-types scripts/check-public-url.mjs",
     "test:pujas": "node --experimental-strip-types --test scripts/test-pujas.mjs",
     "test:autopilot": "node --experimental-strip-types --test scripts/test-autopilot.mjs",
-    "test": "npm run check:links && npm run test:vat && npm run test:order-ref && npm run test:pujas && npm run test:autopilot && npm run test:whop && npm run test:idem && npm run test:acento && npm run test:montos && npm run test:entrega-propia && npm run test:origen-landing && npm run test:catalog-urls",
+    "test": "npm run check:links && npm run test:vat && npm run test:order-ref && npm run test:pujas && npm run test:autopilot && npm run test:whop && npm run test:idem && npm run test:acento && npm run test:montos && npm run test:entrega-propia && npm run test:origen-landing && npm run test:catalog-urls && npm run test:product-cols",
     "deploy:safe": "bash scripts/deploy-safe.sh",
     "test:whop": "node --experimental-strip-types scripts/check-whop-firma.mjs",
     "test:acento": "node --experimental-strip-types scripts/check-whop-acento.mjs",
@@ -23,7 +23,8 @@
     "test:order-ref": "node --experimental-strip-types --test scripts/test-order-ref.mjs",
     "test:entrega-propia": "node --experimental-strip-types --test scripts/test-entrega-propia.mjs",
     "test:origen-landing": "node --experimental-strip-types --test scripts/test-origen-landing.mjs",
-    "test:catalog-urls": "node --experimental-strip-types --import ./scripts/ts-resolve.mjs --test scripts/test-catalog-urls.mjs"
+    "test:catalog-urls": "node --experimental-strip-types --import ./scripts/ts-resolve.mjs --test scripts/test-catalog-urls.mjs",
+    "test:product-cols": "node --experimental-strip-types --import ./scripts/ts-resolve.mjs --test scripts/test-product-cols.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "^2.3.1",

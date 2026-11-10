@@ -331,7 +331,18 @@ async function cobrarConWhop(
   // Sin cast: el tipo Product declara whop_plan_id, asi que si algun dia se
   // cae de PRODUCT_COLS el compilador lo dice. El cast que habia aqui le quito
   // esa posibilidad y el post-pago estuvo sin cobrar desde el 23/10/2026.
-  const plan = product.whop_plan_id;
+  //
+  // EL PLAN DE LA MONEDA DEL PEDIDO, y recien despues el de siempre. El cobro
+  // con tarjeta guardada manda SOLO `plan_id`, sin importe: la moneda que se
+  // cobra es la del plan. Con un unico plan en dolares se le mostraba GBP
+  // 19,99 a un britanico y se le cobraba USD 25,99 -- la pagina de la oferta
+  // usa `priceFor(product, order.currency)`.
+  //
+  // El `?? whop_plan_id` no es un adorno: una moneda sin plan propio tiene que
+  // seguir cobrando como antes, no fallar. Un comprador que no puede pagar es
+  // peor que uno que paga en otra moneda.
+  const moneda = (order.currency ?? "").toUpperCase();
+  const plan = (moneda && product.whop_plan_ids?.[moneda]) || product.whop_plan_id;
   if (!plan) {
     console.error("[upsell whop] producto sin whop_plan_id:", product.slug);
     return NextResponse.json({ reason: "not_available" }, { status: 409 });

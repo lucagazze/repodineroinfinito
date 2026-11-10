@@ -72,6 +72,13 @@ export type Product = {
   /** Plan de Whop con el que se cobra. Sin el, una oferta post-compra no puede
    *  cobrarse: /api/upsell contesta «not_available» y el comprador se va. */
   whop_plan_id?: string | null;
+  /** Un plan por moneda: `{ "GBP": "plan_...", "ZAR": "plan_..." }`.
+   *
+   *  El cobro post-compra manda SOLO `plan_id`, sin importe, asi que la moneda
+   *  que se cobra es la del plan. Con un unico plan en dolares, a un britanico
+   *  se le muestra GBP 19,99 y se le cobra USD 25,99. Si falta la moneda del
+   *  pedido, se cae a `whop_plan_id`, que es como estaba antes. */
+  whop_plan_ids?: Record<string, string> | null;
   /** Plan de fundador: mismo producto, precio de lanzamiento, hasta la fecha. */
   whop_founder_plan_id?: string | null;
   founder_cutoff?: string | null;
@@ -153,7 +160,13 @@ export const PRODUCT_COLS =
   // quitaba al compilador la unica forma de avisar.
   // Medido el 09/11/2026: pedido #27 dijo que SI a Maths Solved (19,99 GBP)
   // a las 06:55 y se fue sin poder pagar.
-  "whop_plan_id,whop_founder_plan_id,founder_cutoff," +
+  //
+  // `whop_plan_ids` esta aqui por la misma razon, y es el hermano del defecto
+  // de arriba: no que el plan falte, sino que sea el de OTRA MONEDA. El cobro
+  // con tarjeta guardada manda solo `plan_id`, sin importe, asi que cobra en
+  // la moneda del plan. Medido el 10/11/2026: todos los planes estaban en USD
+  // y la pagina de la oferta muestra `priceFor(product, order.currency)`.
+  "whop_plan_id,whop_plan_ids,whop_founder_plan_id,founder_cutoff," +
   "product_prices(currency,amount,compare_at,display_value,stripe_price_id)";
 
 // --------------------------------------------------------------- consultas
